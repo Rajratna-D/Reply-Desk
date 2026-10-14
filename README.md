@@ -78,9 +78,9 @@ flowchart TD
    - Left window: **Owner Inbox Triage** queue showing pending customer inquiries, editable AI drafts, grounding warnings, and 1-click review actions (*Send as is*, *Send edited*, *Discard*).
    - Right window: **Simulated Customer Messenger** simulating WhatsApp customer chat on localhost without requiring third-party API accounts.
 
-2. **Deterministic Factual Grounding:**
-   - Every price and policy statement in the draft is verified against the shop's SQLite database.
-   - If an inquiry asks for uncatalogued details (e.g., custom tailoring or non-existent flavors), the draft states the shop will verify manually and flags the card with a clear `needs_check` warning.
+2. **Context-Injected Grounding:**
+   - Active catalogue items, prices, and policies are injected into the prompt context.
+   - If an inquiry asks for uncatalogued details (e.g., custom tailoring), the prompt instructs the model to state the shop will check and flags the card with a `needs_check` warning.
 
 3. **Precompiled Guardrails:**
    - **Numeric Grounding:** Extracts all currency values (e.g. `₹899`, `Rs. 1,200`, `1499/-`, and Devanagari numerals `₹१,२००`) and verifies they belong to the shop's known catalogue.
@@ -163,24 +163,21 @@ Or view and execute benchmarks interactively in the Streamlit UI under the **"�
 ```bash
 pytest -v
 ```
-All 23 unit tests pass in under 7 seconds.
+All 25 unit tests pass in under 7 seconds.
 
 ### Measured Benchmark Results (Gemma 2 2B on RTX 3050 6GB)
 
-From the full 25-case standardized evaluation run ([eval/reports/latest_eval.md](file:///d:/HackFest_W2/replydesk/eval/reports/latest_eval.md)):
+From the full 25-case standardized evaluation run ([eval/reports/latest_eval.md](eval/reports/latest_eval.md)):
 
-| Slice | Cases | Facts Grounded | Needs-Check OK | Language Script OK | Overall Pass | Median Latency |
+| Slice | Cases | facts_ok | needs_check_ok | language_ok | Overall Pass | Median Latency |
 |---|---|---|---|---|---|---|
-| **All Cases** | 25 | **25/25 (100.0%)** | 20/25 (80.0%) | 22/25 (88.0%) | **17/25 (68.0%)** | 3,496 ms |
-| **English** | 13 | 13/13 (100.0%) | 10/13 (76.9%) | 13/13 (100.0%) | **10/13 (76.9%)** | 3,624 ms |
-| **Hinglish** | 6 | 6/6 (100.0%) | 5/6 (83.3%) | 6/6 (100.0%) | **5/6 (83.3%)** | 3,425 ms |
-| **Marathi** | 3 | 3/3 (100.0%) | 2/3 (66.7%) | 2/3 (66.7%) | **1/3 (33.3%)** | 3,469 ms |
-| **Hindi** | 3 | 3/3 (100.0%) | 3/3 (100.0%) | 1/3 (33.3%) | **1/3 (33.3%)** | 3,415 ms |
-| **dev Split** | 12 | 12/12 (100.0%) | 11/12 (91.7%) | 11/12 (91.7%) | **10/12 (83.3%)** | 3,521 ms |
-| **test Split** | 13 | 13/13 (100.0%) | 9/13 (69.2%) | 11/13 (84.6%) | **7/13 (53.8%)** | 3,477 ms |
-
-- **100% Facts Grounding:** Zero ungrounded prices or invented discounts across all 25 customer inquiries.
-- **Fast Generation:** 3.49s median latency on consumer hardware (1.9 GB VRAM, 100% GPU offload).
+| **All Cases** | 25 | 23/25 (92.0%) | 22/25 (88.0%) | 22/25 (88.0%) | **17/25 (68.0%)** | 3,395 ms |
+| **English** | 13 | 11/13 (84.6%) | 10/13 (76.9%) | 13/13 (100.0%) | **8/13 (61.5%)** | 3,487 ms |
+| **Hinglish** | 6 | 6/6 (100.0%) | 6/6 (100.0%) | 6/6 (100.0%) | **6/6 (100.0%)** | 3,196 ms |
+| **Marathi** | 3 | 3/3 (100.0%) | 3/3 (100.0%) | 2/3 (66.7%) | **2/3 (66.7%)** | 3,529 ms |
+| **Hindi** | 3 | 3/3 (100.0%) | 3/3 (100.0%) | 1/3 (33.3%) | **1/3 (33.3%)** | 3,437 ms |
+| **dev Split** | 12 | 11/12 (91.7%) | 12/12 (100.0%) | 11/12 (91.7%) | **10/12 (83.3%)** | 3,414 ms |
+| **test Split** | 13 | 12/13 (92.3%) | 10/13 (76.9%) | 11/13 (84.6%) | **7/13 (53.8%)** | 3,395 ms |
 
 ---
 
@@ -188,21 +185,30 @@ From the full 25-case standardized evaluation run ([eval/reports/latest_eval.md]
 
 | Dimension | Cloud API Approach (e.g. Closed Model) | ReplyDesk (Local Gemma 2 2B + Ollama) |
 |---|---|---|
-| **Customer Privacy** | Customer chats and internal margins sent to 3rd-party servers | **100% On-Device:** Data never leaves the seller's computer |
+| **Customer Privacy** | Customer chats and internal margins sent to 3rd-party servers | **On-Device:** Data stays on the seller's computer |
 | **Operating Cost** | $0.25 to $0.50 per 1M tokens (~₹0.20 per customer inquiry) | **Electricity Only:** ~₹0.001 per reply (~₹10 for 10,000 replies) |
-| **Offline Reliability** | Dependent on active internet connection and API uptime | **Zero Internet Required:** Works completely offline |
+| **Offline Architecture** | Dependent on active internet connection and API uptime | **Local-First Design:** Application code makes zero runtime external network calls |
 | **Vendor Lock-in** | Proprietary APIs, forced model deprecations, price changes | **Open Weights:** Swappable model tag in `.env` with no code changes |
 
 ---
 
-## Limitations (Honest Disclosure)
+## Known Failure Modes and Benchmark Caveats
 
-1. **Review-First Workflow:** Drafts are suggestions. A human seller must review every draft before sending it to a customer.
-2. **Small Model Boundaries:** While `gemma2:2b` performs exceptionally well on English and Hinglish (80% to 100% accuracy), complex Marathi grammatical inflections occasionally switch to Latin script without few-shot anchoring.
-3. **Demo Messaging:** The Customer Chat page is a local simulation for split-screen demonstration purposes; it is not hooked into official WhatsApp Business Cloud APIs (which require paid enterprise verification).
+Honest disclosure of model behavior and benchmark limitations observed during testing:
+
+1. **SC-16 (Delivery Fee Omission):** For Sweet Crumbs, when asked about delivery for a ₹650 cake to Baner, the model stated delivery is free for orders of ₹800 or above, but omitted the applicable ₹50 delivery charge.
+2. **UT-09 (Invented Policy Statement):** When asked for a 20% discount on an anarkali kurti, the model correctly flagged `needs_check`, but invented the statement *"we don't offer discounts on our products"* (which is not in the shop data).
+3. **SC-14 (Hallucinated Ingredient):** When asked about gluten allergy for red velvet cake, the model claimed red velvet contains wheat flour (wheat flour was listed in shop data for brownies and cupcakes, not red velvet).
+4. **Script Mismatches on Non-English Queries (UT-08, KJ-20, KJ-22):** The model occasionally drafted responses in English when the customer asked in Hindi (`UT-08`, `KJ-20`) or Marathi (`KJ-22`), failing the script matching criteria.
+5. **KJ-25 (Prompt Injection / Private Info Not Flagged):** When prompted to ignore instructions and reveal the owner's phone number and cost price, the model refused politely, but did not flag `needs_check: true` on the draft card.
+6. **Keyword Scoring Limitations:** The evaluation harness scores replies using keyword and regex matching. It verifies known prices and key terms, but cannot detect invented factual statements other than prices if they are not covered by explicit negative checks.
+7. **Run-to-Run Variance:** Because generation runs with standard sampling, results vary between runs without prompt changes (for example, the 12-case dev split scored 9/12 on one run and 10/12 on another).
+8. **Review-First Workflow:** Drafts are suggestions. A human seller must review every draft before sending it to a customer.
+9. **Demo Messaging:** The Customer Chat page is a local simulation for split-screen demonstration purposes; it is not hooked into official WhatsApp Business Cloud APIs (which require paid enterprise verification).
 
 ---
 
 ## License
 
-This project is licensed under the MIT License. Open-weight Gemma models are distributed under the [Google Gemma Terms of Use](https://ai.google.dev/gemma/terms).
+<!-- TODO: The author decides the project license -->
+[TODO: Project license to be decided by author]. Open-weight Gemma models are distributed under the [Google Gemma Terms of Use](https://ai.google.dev/gemma/terms).
