@@ -76,7 +76,7 @@ Rule: work one milestone at a time. Tick boxes as you finish. Add a dated line t
 
 ## Stretch (only if everything above is done)
 
-- [ ] FTS5 retrieval for large catalogues (`db/fts.sql`).
+- [x] FTS5 retrieval for large catalogues (`db/fts.sql`).
 - [ ] Quick fine-tune or prompt-tuning comparison for Marathi.
 - [ ] Save the agent session with DevRelay and embed it in the post.
 - [ ] Export a shop to a printable FAQ sheet.

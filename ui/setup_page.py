@@ -18,6 +18,7 @@ from engine.db import (
     list_products_full,
     list_sample_replies,
     save_shop_details,
+    search_products_full,
 )
 from engine.importer import (
     ConfigError,
@@ -123,22 +124,41 @@ def render_setup_page(active_slug: str):
 
         # ----------------- TAB 2: Products & Catalogue -----------------
         with tab_prod:
-            products = list_products_full(conn, seller_id)
             col_p1, col_p2 = st.columns([6, 5], gap="large")
 
             with col_p1:
+                search_query = st.text_input(
+                    "Search Catalogue (FTS5)",
+                    placeholder="Search by keyword, material, or category...",
+                    key=f"search_prod_{seller_id}",
+                    label_visibility="collapsed",
+                )
+
+                if search_query.strip():
+                    products = search_products_full(conn, seller_id, search_query.strip())
+                else:
+                    products = list_products_full(conn, seller_id)
+
                 st.markdown(
                     f"""
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                        <span style="font-weight: 700; font-size: 1rem; color: #f8fafc;">Active Catalogue</span>
-                        <span class="rd-badge badge-clean">{len(products)} Items</span>
+                        <span style="font-weight: 700; font-size: 1rem; color: #f8fafc;">
+                            {'Filtered Search Results' if search_query.strip() else 'Active Catalogue'}
+                        </span>
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <span class="rd-badge badge-lang" style="font-size: 0.72rem;">⚡ FTS5 Search</span>
+                            <span class="rd-badge badge-clean">{len(products)} Items</span>
+                        </div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
                 if not products:
-                    st.info("No products registered. Add your first item using the form on the right.")
+                    if search_query.strip():
+                        st.info(f"No products found matching '{search_query.strip()}'.")
+                    else:
+                        st.info("No products registered. Add your first item using the form on the right.")
 
                 for p in products:
                     status_color = {

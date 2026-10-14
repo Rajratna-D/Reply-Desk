@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -10,6 +11,46 @@ from typing import Any
 from engine.config import load_settings
 
 SCHEMA_FILE = Path(__file__).resolve().parent.parent / "db" / "schema.sql"
+FTS_FILE = Path(__file__).resolve().parent.parent / "db" / "fts.sql"
+
+
+def is_fts5_available(conn: sqlite3.Connection) -> bool:
+    """Check if the SQLite build supports FTS5."""
+    try:
+        cur = conn.cursor()
+        cur.execute("PRAGMA compile_options;")
+        options = {row[0] for row in cur.fetchall()}
+        if "ENABLE_FTS5" in options:
+            return True
+        cur.execute("SELECT 1 FROM pragma_module_list WHERE name = 'fts5';")
+        return cur.fetchone() is not None
+    except Exception:
+        return False
+
+
+def init_fts(conn: sqlite3.Connection) -> bool:
+    """Initialize FTS5 virtual table and synchronization triggers if supported."""
+    if not is_fts5_available(conn):
+        return False
+
+    try:
+        cur = conn.cursor()
+        # Base products table must exist before setting up FTS5
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='products';")
+        if not cur.fetchone():
+            return False
+
+        # Check if FTS sync triggers are already installed
+        cur.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name='trg_products_fts_ai';")
+        if not cur.fetchone():
+            if not FTS_FILE.exists():
+                return False
+            fts_sql = FTS_FILE.read_text(encoding="utf-8")
+            conn.executescript(fts_sql)
+            conn.commit()
+        return True
+    except Exception:
+        return False
 
 
 def connect(db_path: str | None = None) -> sqlite3.Connection:
@@ -32,6 +73,7 @@ def connect(db_path: str | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous = NORMAL;")
     conn.execute("PRAGMA busy_timeout = 30000;")
     conn.execute("PRAGMA cache_size = -64000;")
+    init_fts(conn)
     return conn
 
 
@@ -50,6 +92,8 @@ def init_db(db_path: str | None = None) -> None:
             schema_sql = SCHEMA_FILE.read_text(encoding="utf-8")
             conn.executescript(schema_sql)
             conn.commit()
+
+        init_fts(conn)
     finally:
         conn.close()
 
@@ -229,6 +273,89 @@ def list_products_full(conn: sqlite3.Connection, seller_id: int) -> list[dict[st
     )
     products = []
     for p in cur.fetchall():
+        pid = p["id"]
+        cur.execute(
+            "SELECT id, label, price_inr FROM product_variants WHERE product_id = ? ORDER BY id ASC;",
+            (pid,),
+        )
+        variants = [{"id": v["id"], "label": v["label"], "price_inr": v["price_inr"]} for v in cur.fetchall()]
+        attrs = {}
+        if p["attributes"]:
+            try:
+                attrs = json.loads(p["attributes"])
+            except Exception:
+                attrs = {}
+        products.append({
+            "id": p["id"],
+            "sku": p["sku"],
+            "name": p["name"],
+            "category": p["category"] or "",
+            "description": p["description"] or "",
+            "attributes": attrs,
+            "stock_status": p["stock_status"],
+            "notes": p["notes"] or "",
+            "variants": variants,
+        })
+    return products
+
+
+def sanitize_fts_query(text: str) -> str:
+    """Extract valid alphanumeric words across Latin, digits, and Devanagari scripts for FTS5."""
+    tokens = re.findall(r"[a-zA-Z0-9_\u0900-\u097F]+", text)
+    clean_tokens = [f'"{tok}"*' for tok in tokens if len(tok) >= 2]
+    return " OR ".join(clean_tokens)
+
+
+def search_products_fts(
+    conn: sqlite3.Connection,
+    seller_id: int,
+    query_text: str,
+    limit: int = 10,
+) -> list[sqlite3.Row]:
+    """Search products using SQLite FTS5 BM25 ranking for a seller."""
+    if not is_fts5_available(conn):
+        return []
+
+    sanitized = sanitize_fts_query(query_text)
+    if not sanitized:
+        return []
+
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT p.id, p.sku, p.name, p.category, p.description, p.attributes, p.stock_status, p.notes,
+                   f.rank AS fts_rank
+            FROM products_fts f
+            JOIN products p ON p.id = f.rowid
+            WHERE products_fts MATCH ? AND p.seller_id = ?
+            ORDER BY f.rank ASC
+            LIMIT ?;
+            """,
+            (sanitized, seller_id, limit),
+        )
+        return cur.fetchall()
+    except sqlite3.OperationalError:
+        return []
+
+
+def search_products_full(
+    conn: sqlite3.Connection,
+    seller_id: int,
+    query_text: str,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """Search products with variants for a seller, with fallback to all products if query empty."""
+    if not query_text.strip():
+        return list_products_full(conn, seller_id)
+
+    matching_rows = search_products_fts(conn, seller_id, query_text, limit=limit)
+    if not matching_rows:
+        return []
+
+    cur = conn.cursor()
+    products = []
+    for p in matching_rows:
         pid = p["id"]
         cur.execute(
             "SELECT id, label, price_inr FROM product_variants WHERE product_id = ? ORDER BY id ASC;",

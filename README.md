@@ -98,6 +98,12 @@ flowchart TD
    - Built-in benchmark runner ([eval/run_eval.py](file:///d:/HackFest_W2/replydesk/eval/run_eval.py)) evaluates 34 standardized customer test cases across 4 languages (21 dev cases, 13 test cases).
    - Dedicated Streamlit dashboard with top KPI tiles, performance slices (All, English, Hindi, Marathi, Hinglish, dev, test), diagnostic failure inspector, and markdown report downloads.
 
+7. **SQLite FTS5 Smart Hybrid Retrieval:**
+   - Full-text search over `products(name, category, description, notes)` powered by SQLite's native FTS5 engine with BM25 relevance ranking.
+   - Automatically scales from boutique catalogues (full catalogue in prompt for 100% recall) to large inventories, retrieving the top matching items for the customer inquiry.
+   - Real-time triggers (`AFTER INSERT`, `AFTER UPDATE`, `AFTER DELETE`) keep the search index synchronized with zero maintenance.
+   - Live FTS5 keyword filter directly embedded in the Catalogue manager UI.
+
 ---
 
 ## Hardware Tested & System Telemetry
@@ -163,7 +169,7 @@ Or view and execute benchmarks interactively in the Streamlit UI under the **"ðŸ
 ```bash
 pytest -v
 ```
-All 25 unit tests pass in under 7 seconds.
+All 35 unit tests pass in under 7 seconds.
 
 ### Measured Benchmark Results (Gemma 2 2B on RTX 3050 6GB)
 

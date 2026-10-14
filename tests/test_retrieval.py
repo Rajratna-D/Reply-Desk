@@ -55,3 +55,20 @@ def test_build_context_script_preference(populated_db):
     assert first_ex_en["language"] in ("en", "hinglish")
 
     conn.close()
+
+
+def test_build_context_fts_threshold_scaling(populated_db):
+    conn = connect(populated_db)
+    # Urban Thread has 4 products in config.
+    # Set fts_threshold to 2 to trigger FTS5 retrieval, requesting top_k=2.
+    ctx = build_context(conn, 1, message="cotton kurti", fts_threshold=2, top_k=2)
+
+    lines = ctx.catalogue_block.strip().split("\n")
+    # Should only return top_k=2 products
+    assert len(lines) == 2
+    # The first product should be the Cotton Kurti
+    assert "Cotton Kurti" in lines[0]
+    # But all known prices across the full catalogue (e.g. Palazzo pants 599) must still be preserved
+    assert {899, 1499, 599, 349}.issubset(ctx.known_amounts)
+
+    conn.close()

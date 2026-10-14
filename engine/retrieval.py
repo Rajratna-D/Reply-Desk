@@ -5,6 +5,7 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Any
 
+from engine.db import search_products_fts
 from engine.guardrails import extract_amounts, script_of
 
 
@@ -25,16 +26,64 @@ STOCK_STATUS_MAP = {
 }
 
 
+def _format_product_line(
+    p: sqlite3.Row,
+    variant_rows: list[sqlite3.Row],
+    known_amounts: set[int],
+) -> str:
+    """Format a single product row with variants and attributes into a prompt string."""
+    for v in variant_rows:
+        known_amounts.add(int(v["price_inr"]))
+
+    var_strs = [f"{v['label']} ₹{v['price_inr']}" for v in variant_rows]
+    variants_summary = "; ".join(var_strs) if var_strs else "Price unavailable"
+
+    cat_str = f" ({p['category']})" if p["category"] else ""
+
+    attrs_str = ""
+    if p["attributes"]:
+        try:
+            attrs_dict = json.loads(p["attributes"])
+            attr_parts = []
+            for k, val in attrs_dict.items():
+                if isinstance(val, list):
+                    attr_parts.append(f"{k}: {', '.join(str(x) for x in val)}")
+                else:
+                    attr_parts.append(f"{k}: {val}")
+            if attr_parts:
+                attrs_str = " | " + " | ".join(attr_parts)
+        except json.JSONDecodeError:
+            pass
+
+    stock_text = STOCK_STATUS_MAP.get(p["stock_status"], p["stock_status"])
+    line = f"- [{p['sku']}] {p['name']}{cat_str}: {variants_summary}{attrs_str} | Stock: {stock_text}"
+
+    if p["notes"]:
+        line += f" | Notes: {p['notes']}"
+        for amt in extract_amounts(p["notes"]):
+            known_amounts.add(amt)
+
+    if p["description"]:
+        for amt in extract_amounts(p["description"]):
+            known_amounts.add(amt)
+
+    return line
+
+
 def build_context(
     conn: sqlite3.Connection,
     seller_id: int,
     message: str | None = None,
     *,
     max_products: int = 250,
+    fts_threshold: int = 15,
+    top_k: int = 6,
 ) -> Context:
     """Build the context package for a given seller to feed the prompt.
 
-    Puts the whole catalogue (up to max_products) into context.
+    For small catalogues (<= fts_threshold products), includes the whole catalogue
+    for 100% recall. For large catalogues (> fts_threshold products), uses SQLite FTS5
+    to retrieve the top_k most relevant products for the customer message.
     Collects all known prices and currency amounts from products and policies.
     """
     cur = conn.cursor()
@@ -65,20 +114,75 @@ def build_context(
     }
 
     # 2. Products and variants
+    known_amounts: set[int] = set()
+
+    # Preload all known variant prices across the entire catalogue so guardrails remain 100% accurate
     cur.execute(
         """
-        SELECT id, sku, name, category, description, attributes, stock_status, notes
-        FROM products WHERE seller_id = ?
-        ORDER BY id ASC
-        LIMIT ?;
+        SELECT DISTINCT v.price_inr
+        FROM product_variants v
+        JOIN products p ON p.id = v.product_id
+        WHERE p.seller_id = ?;
         """,
-        (seller_id, max_products),
+        (seller_id,),
     )
-    product_rows = cur.fetchall()
+    for v_row in cur.fetchall():
+        known_amounts.add(int(v_row["price_inr"]))
 
-    known_amounts: set[int] = set()
+    # Check catalogue size
+    cur.execute("SELECT COUNT(*) FROM products WHERE seller_id = ?;", (seller_id,))
+    total_products = cur.fetchone()[0]
+
+    product_rows: list[sqlite3.Row] = []
+
+    if total_products <= fts_threshold:
+        # Small catalogue: inject complete catalogue for 100% recall
+        cur.execute(
+            """
+            SELECT id, sku, name, category, description, attributes, stock_status, notes
+            FROM products WHERE seller_id = ?
+            ORDER BY id ASC
+            LIMIT ?;
+            """,
+            (seller_id, max_products),
+        )
+        product_rows = cur.fetchall()
+    else:
+        # Large catalogue: use FTS5 smart retrieval based on customer query
+        matched_ids: list[int] = []
+        if message:
+            fts_rows = search_products_fts(conn, seller_id, message, limit=top_k)
+            for r in fts_rows:
+                product_rows.append(r)
+                matched_ids.append(r["id"])
+
+        # Backfill with remaining in-stock products if under top_k
+        if len(product_rows) < top_k:
+            remaining = top_k - len(product_rows)
+            if matched_ids:
+                placeholders = ",".join("?" for _ in matched_ids)
+                query = f"""
+                    SELECT id, sku, name, category, description, attributes, stock_status, notes
+                    FROM products
+                    WHERE seller_id = ? AND id NOT IN ({placeholders})
+                    ORDER BY CASE stock_status WHEN 'in_stock' THEN 1 WHEN 'low_stock' THEN 2 ELSE 3 END, id ASC
+                    LIMIT ?;
+                """
+                params = (seller_id,) + tuple(matched_ids) + (remaining,)
+            else:
+                query = """
+                    SELECT id, sku, name, category, description, attributes, stock_status, notes
+                    FROM products
+                    WHERE seller_id = ?
+                    ORDER BY CASE stock_status WHEN 'in_stock' THEN 1 WHEN 'low_stock' THEN 2 ELSE 3 END, id ASC
+                    LIMIT ?;
+                """
+                params = (seller_id, remaining)
+
+            cur.execute(query, params)
+            product_rows.extend(cur.fetchall())
+
     catalogue_lines: list[str] = []
-
     for p in product_rows:
         pid = p["id"]
         cur.execute(
@@ -86,48 +190,7 @@ def build_context(
             (pid,),
         )
         variant_rows = cur.fetchall()
-        for v in variant_rows:
-            known_amounts.add(int(v["price_inr"]))
-
-        # Build variants string
-        # e.g. "500 g ₹650; 1 kg ₹1200"
-        var_strs = [f"{v['label']} ₹{v['price_inr']}" for v in variant_rows]
-        variants_summary = "; ".join(var_strs) if var_strs else "Price unavailable"
-
-        # Category
-        cat_str = f" ({p['category']})" if p["category"] else ""
-
-        # Attributes
-        attrs_str = ""
-        if p["attributes"]:
-            try:
-                attrs_dict = json.loads(p["attributes"])
-                attr_parts = []
-                for k, val in attrs_dict.items():
-                    if isinstance(val, list):
-                        attr_parts.append(f"{k}: {', '.join(str(x) for x in val)}")
-                    else:
-                        attr_parts.append(f"{k}: {val}")
-                if attr_parts:
-                    attrs_str = " | " + " | ".join(attr_parts)
-            except json.JSONDecodeError:
-                pass
-
-        # Stock status
-        stock_text = STOCK_STATUS_MAP.get(p["stock_status"], p["stock_status"])
-
-        # Line construction
-        line = f"- [{p['sku']}] {p['name']}{cat_str}: {variants_summary}{attrs_str} | Stock: {stock_text}"
-        if p["notes"]:
-            line += f" | Notes: {p['notes']}"
-            # Extract any amounts mentioned in notes
-            for amt in extract_amounts(p["notes"]):
-                known_amounts.add(amt)
-
-        if p["description"]:
-            for amt in extract_amounts(p["description"]):
-                known_amounts.add(amt)
-
+        line = _format_product_line(p, variant_rows, known_amounts)
         catalogue_lines.append(line)
 
     catalogue_block = "\n".join(catalogue_lines)
