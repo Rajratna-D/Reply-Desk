@@ -36,11 +36,12 @@ def draft_reply(
     log: bool = True,
     db_path: str | None = None,
     seller_action: str | None = None,
+    conn: sqlite3.Connection | None = None,
 ) -> Draft:
     """Orchestrate drafting a reply for a seller.
 
     Steps:
-    1. Connect to SQLite and fetch seller.
+    1. Connect to SQLite (or reuse passed connection) and fetch seller.
     2. Build prompt context (shop details, catalogue, policies, style samples, known amounts).
     3. Generate structured JSON reply using Ollama.
     4. Run guardrails (numeric price grounding, risk topic alerts).
@@ -51,7 +52,11 @@ def draft_reply(
     settings = load_settings(model_name=model, db_path=db_path)
     active_model = settings.model_name
 
-    conn = connect(settings.db_path)
+    should_close = False
+    if conn is None:
+        conn = connect(settings.db_path)
+        should_close = True
+
     try:
         seller = get_seller_by_slug(conn, seller_slug)
         if not seller:
@@ -124,4 +129,5 @@ def draft_reply(
             output_tokens=raw_result.get("_output_tokens"),
         )
     finally:
-        conn.close()
+        if should_close:
+            conn.close()

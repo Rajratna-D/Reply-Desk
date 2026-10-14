@@ -19,6 +19,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+# Force UTF-8 encoding for console output on Windows
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 # Ensure project root is in sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -181,6 +188,7 @@ def run_evaluation(
                     message=message,
                     model=active_model,
                     log=False,
+                    conn=conn,
                 )
             except Exception as ex:
                 # Handle generation failure gracefully
@@ -385,7 +393,7 @@ def main():
     print("=" * 65)
 
     def print_progress(idx, total, case):
-        print(f"[{idx+1:02d}/{total:02d}] Evaluating {case['id']} ({case['shop']} / {case['language']})...")
+        print(f"[{idx+1:02d}/{total:02d}] Evaluating {case['id']} ({case['shop']} / {case['language']})...", flush=True)
 
     summary = run_evaluation(
         model=args.model,
