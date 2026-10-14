@@ -39,7 +39,7 @@ Rule: work one milestone at a time. Tick boxes as you finish. Add a dated line t
 
 ## M3 - Evaluation (16 Oct)
 
-- [ ] `eval/run_eval.py` runs every case in `eval/questions.json` and writes to `eval_runs` / `eval_results` plus a CSV and markdown report.
+- [x] `eval/run_eval.py` runs every case in `eval/questions.json` and writes to `eval_runs` / `eval_results` plus a CSV and markdown report.
 - [ ] Run on the smallest model, then the next size up. Record results in `docs/BUILD_LOG.md`.
 - [ ] Review failures by hand, especially Hindi and Marathi. Fix the biggest problems in the prompt or guardrails and re-run.
 - [ ] Manual tone scores (1 to 5) on a sample of replies.
