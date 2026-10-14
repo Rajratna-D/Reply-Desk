@@ -181,6 +181,240 @@ def get_reply_by_id(conn: sqlite3.Connection, reply_id: int) -> sqlite3.Row | No
     )
     return cur.fetchone()
 
+def list_history(
+    conn: sqlite3.Connection,
+    seller_id: int,
+    action_filter: str | None = None,
+) -> list[sqlite3.Row]:
+    """Fetch history rows for a seller, newest first, with optional action filter."""
+    cur = conn.cursor()
+    if action_filter and action_filter != "all":
+        if action_filter == "pending":
+            cur.execute(
+                """
+                SELECT * FROM reply_log
+                WHERE seller_id = ? AND seller_action IS NULL
+                ORDER BY created_at DESC, id DESC;
+                """,
+                (seller_id,),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT * FROM reply_log
+                WHERE seller_id = ? AND seller_action = ?
+                ORDER BY created_at DESC, id DESC;
+                """,
+                (seller_id, action_filter),
+            )
+    else:
+        cur.execute(
+            """
+            SELECT * FROM reply_log
+            WHERE seller_id = ?
+            ORDER BY created_at DESC, id DESC;
+            """,
+            (seller_id,),
+        )
+    return cur.fetchall()
+
+
+def list_products_full(conn: sqlite3.Connection, seller_id: int) -> list[dict[str, Any]]:
+    """Return all products with their variants for a seller."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, sku, name, category, description, attributes, stock_status, notes
+        FROM products WHERE seller_id = ? ORDER BY id ASC;
+        """,
+        (seller_id,),
+    )
+    products = []
+    for p in cur.fetchall():
+        pid = p["id"]
+        cur.execute(
+            "SELECT id, label, price_inr FROM product_variants WHERE product_id = ? ORDER BY id ASC;",
+            (pid,),
+        )
+        variants = [{"id": v["id"], "label": v["label"], "price_inr": v["price_inr"]} for v in cur.fetchall()]
+        attrs = {}
+        if p["attributes"]:
+            try:
+                attrs = json.loads(p["attributes"])
+            except Exception:
+                attrs = {}
+        products.append({
+            "id": p["id"],
+            "sku": p["sku"],
+            "name": p["name"],
+            "category": p["category"] or "",
+            "description": p["description"] or "",
+            "attributes": attrs,
+            "stock_status": p["stock_status"],
+            "notes": p["notes"] or "",
+            "variants": variants,
+        })
+    return products
+
+
+def list_policies(conn: sqlite3.Connection, seller_id: int) -> list[sqlite3.Row]:
+    """Return policies for a seller."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, topic, title, body FROM policies WHERE seller_id = ? ORDER BY id ASC;",
+        (seller_id,),
+    )
+    return cur.fetchall()
+
+
+def list_sample_replies(conn: sqlite3.Connection, seller_id: int) -> list[sqlite3.Row]:
+    """Return sample replies for a seller."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, language, customer_message, reply FROM sample_replies WHERE seller_id = ? ORDER BY id ASC;",
+        (seller_id,),
+    )
+    return cur.fetchall()
+
+
+def save_shop_details(
+    conn: sqlite3.Connection,
+    seller_id: int,
+    name: str,
+    description: str,
+    tone: str,
+    default_language: str,
+    languages: list[str],
+) -> None:
+    """Update shop details and supported languages."""
+    with conn:
+        conn.execute(
+            """
+            UPDATE sellers
+            SET shop_name = ?, description = ?, tone = ?, default_language = ?, updated_at = datetime('now')
+            WHERE id = ?;
+            """,
+            (name, description, tone, default_language, seller_id),
+        )
+        conn.execute("DELETE FROM seller_languages WHERE seller_id = ?;", (seller_id,))
+        for lang in languages:
+            conn.execute(
+                "INSERT INTO seller_languages (seller_id, language) VALUES (?, ?);",
+                (seller_id, lang),
+            )
+
+
+def add_or_update_product(
+    conn: sqlite3.Connection,
+    seller_id: int,
+    sku: str,
+    name: str,
+    category: str,
+    description: str,
+    attributes: dict,
+    stock_status: str,
+    notes: str,
+    variants: list[dict],
+) -> int:
+    """Insert or update a product and its variants."""
+    with conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO products (
+                seller_id, sku, name, category, description, attributes, stock_status, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(seller_id, sku) DO UPDATE SET
+                name = excluded.name,
+                category = excluded.category,
+                description = excluded.description,
+                attributes = excluded.attributes,
+                stock_status = excluded.stock_status,
+                notes = excluded.notes;
+            """,
+            (
+                seller_id,
+                sku,
+                name,
+                category or None,
+                description or None,
+                json.dumps(attributes),
+                stock_status,
+                notes or None,
+            ),
+        )
+        cur.execute("SELECT id FROM products WHERE seller_id = ? AND sku = ?;", (seller_id, sku))
+        product_id = cur.fetchone()["id"]
+
+        # Re-sync variants
+        conn.execute("DELETE FROM product_variants WHERE product_id = ?;", (product_id,))
+        for v in variants:
+            conn.execute(
+                "INSERT INTO product_variants (product_id, label, price_inr) VALUES (?, ?, ?);",
+                (product_id, v["label"], int(v["price_inr"])),
+            )
+        return product_id
+
+
+def delete_product(conn: sqlite3.Connection, product_id: int) -> None:
+    """Delete a product by id (cascades delete variants)."""
+    with conn:
+        conn.execute("DELETE FROM products WHERE id = ?;", (product_id,))
+
+
+def add_policy(conn: sqlite3.Connection, seller_id: int, topic: str, title: str, body: str) -> int:
+    """Insert or update a policy."""
+    with conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO policies (seller_id, topic, title, body)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(seller_id, topic, title) DO UPDATE SET
+                body = excluded.body;
+            """,
+            (seller_id, topic, title, body),
+        )
+        return cur.lastrowid  # type: ignore[return-value]
+
+
+def delete_policy(conn: sqlite3.Connection, policy_id: int) -> None:
+    """Delete a policy by id."""
+    with conn:
+        conn.execute("DELETE FROM policies WHERE id = ?;", (policy_id,))
+
+
+def add_sample_reply(
+    conn: sqlite3.Connection,
+    seller_id: int,
+    language: str,
+    customer_message: str,
+    reply: str,
+) -> int:
+    """Insert a sample reply."""
+    with conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO sample_replies (seller_id, language, customer_message, reply)
+            VALUES (?, ?, ?, ?);
+            """,
+            (seller_id, language, customer_message, reply),
+        )
+        return cur.lastrowid  # type: ignore[return-value]
+
+
+def delete_sample_reply(conn: sqlite3.Connection, sample_id: int) -> None:
+    """Delete a sample reply by id."""
+    with conn:
+        conn.execute("DELETE FROM sample_replies WHERE id = ?;", (sample_id,))
+
+
+def delete_seller(conn: sqlite3.Connection, seller_id: int) -> None:
+    """Delete a seller and all children."""
+    with conn:
+        conn.execute("DELETE FROM sellers WHERE id = ?;", (seller_id,))
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "init":
