@@ -8,19 +8,17 @@ import streamlit as st
 
 PREMIUM_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
-
 /* ==========================================================================
-   Base Typography & Resets
+   Base Typography & Resets (Local System Font Stack - Zero External Calls)
    ========================================================================== */
 html, body, [class*="css"], .stApp {
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
     letter-spacing: -0.015em;
     -webkit-font-smoothing: antialiased;
 }
 
 code, pre, .font-mono {
-    font-family: 'JetBrains Mono', monospace !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
 }
 
 /* Hide Streamlit default clutter */
