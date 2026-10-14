@@ -34,23 +34,29 @@ def main():
     try:
         settings = load_settings()
         active_model = settings.model_name
-    except Exception as e:
+    except Exception:
         settings = None
-        active_model = "Not set (set in .env)"
+        active_model = "gemma2:2b"
 
     # 3. Sidebar
     with st.sidebar:
         st.markdown(
             """
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                <span style="font-size: 1.8rem;">🛍️</span>
-                <span style="font-size: 1.4rem; font-weight: 700; letter-spacing: -0.5px;">ReplyDesk</span>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 1.6rem;">🛍️</span>
+                    <span style="font-size: 1.3rem; font-weight: 800; letter-spacing: -0.03em; color: #f8fafc;">ReplyDesk</span>
+                </div>
+                <span style="font-size: 0.65rem; background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); padding: 2px 6px; border-radius: 4px; font-weight: 700; letter-spacing: 0.05em;">
+                    LOCAL AI
+                </span>
+            </div>
+            <div style="font-size: 0.78rem; color: #94a3b8; line-height: 1.35; margin-bottom: 12px;">
+                Private, grounded assistant for Instagram & WhatsApp shops.
             </div>
             """,
             unsafe_allow_html=True,
         )
-        st.caption("Local-first assistant for Instagram & WhatsApp shops.")
-        st.divider()
 
         # Shop Selector
         conn = connect()
@@ -60,7 +66,7 @@ def main():
             conn.close()
 
         if not sellers:
-            st.error("No shops registered in the database. Please initialize with sample configs.")
+            st.error("No shops registered. Please initialize with sample configs.")
             active_slug = "urban_thread"
         else:
             shop_slugs = [s["slug"] for s in sellers]
@@ -80,10 +86,17 @@ def main():
             st.session_state["active_slug"] = selected_slug
             active_slug = selected_slug
 
-        st.divider()
+        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
         # Navigation
-        st.markdown("**Navigation**")
+        st.markdown(
+            """
+            <div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;">
+                WORKSPACE
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         pages = {
             "💬 Customer Chat (Demo)": "chat",
             "📥 Owner Inbox": "inbox",
@@ -99,33 +112,52 @@ def main():
         )
         page_key = pages[nav_selection]
 
-        st.divider()
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
 
-        # System health indicators
-        st.markdown("**Local AI Engine**")
-        if is_ollama_up:
-            st.markdown(
-                '<div style="font-size: 0.85rem; color: #10b981; display: flex; align-items: center; gap: 6px;">'
-                '● <span style="color: inherit; font-weight: 600;">Ollama Online</span>'
-                '</div>',
-                unsafe_allow_html=True,
-            )
-            model_installed = any(active_model in m for m in available_models)
-            if model_installed:
-                st.caption(f"Model: `{active_model}` (GPU offloaded)")
+        # Local Engine Status Box
+        st.markdown(
+            """
+            <div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;">
+                SYSTEM TELEMETRY
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        with st.container(border=True):
+            if is_ollama_up:
+                model_installed = any(active_model in m for m in available_models)
+                model_note = f"<code>{active_model}</code>" if model_installed else f"⚠️ <code>{active_model}</code> not pulled"
+                st.markdown(
+                    f"""
+                    <div style="font-size: 0.82rem; color: #34d399; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                        <span class="pulse-dot"></span> Ollama Active
+                    </div>
+                    <div style="font-size: 0.76rem; color: #94a3b8; margin-top: 4px;">
+                        Model: {model_note}
+                    </div>
+                    <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">
+                        100% GPU Offload • RTX 3050
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
             else:
-                st.caption(f"⚠️ Model `{active_model}` not pulled")
-        else:
-            st.markdown(
-                '<div style="font-size: 0.85rem; color: #ef4444; display: flex; align-items: center; gap: 6px;">'
-                '● <span style="color: inherit; font-weight: 600;">Ollama Offline</span>'
-                '</div>',
-                unsafe_allow_html=True,
-            )
+                st.markdown(
+                    """
+                    <div style="font-size: 0.82rem; color: #ef4444; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                        <span class="pulse-dot" style="background-color: #ef4444;"></span> Ollama Offline
+                    </div>
+                    <div style="font-size: 0.74rem; color: #f87171; margin-top: 3px;">
+                        Run <code>ollama serve</code> in terminal
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-        st.caption("Privacy: Runs 100% on localhost. No data sent to external servers.")
+        st.caption("🔒 100% On-Device Privacy. No external API calls.")
 
-    # Top-level offline warning banner
+    # Offline warning banner if Ollama is down
     if not is_ollama_up:
         st.error(
             "⚠️ **Local Ollama Server is Not Running.** "

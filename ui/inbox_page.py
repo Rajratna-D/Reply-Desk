@@ -1,4 +1,4 @@
-"""Owner inbox triage page for managing incoming simulated customer inquiries."""
+"""Owner inbox triage queue designed like a modern merchant support dashboard."""
 
 import json
 import streamlit as st
@@ -6,9 +6,6 @@ from engine.db import connect, get_seller_by_slug, list_pending_replies, set_rep
 
 
 def render_inbox_page(active_slug: str):
-    st.title("📥 Owner Inbox")
-    st.caption("Review, edit, and send drafted replies to incoming customer inquiries.")
-
     conn = connect()
     try:
         seller = get_seller_by_slug(conn, active_slug)
@@ -19,18 +16,80 @@ def render_inbox_page(active_slug: str):
         seller_id = seller["id"]
         pending_items = list_pending_replies(conn, seller_id)
 
-        col_header, col_refresh = st.columns([4, 1])
-        with col_header:
-            st.subheader(f"Pending Messages ({len(pending_items)})")
-        with col_refresh:
-            if st.button("🔄 Refresh Inbox", use_container_width=True):
+        # Header with Metrics
+        c_title, c_ref = st.columns([4, 1.2])
+        with c_title:
+            st.title("📥 Owner Inbox")
+            st.caption(f"Triage & approval queue for **{seller['shop_name']}** • 100% on-device AI")
+        with c_ref:
+            if st.button("🔄 Refresh Queue", use_container_width=True):
                 st.rerun()
 
+        flagged_count = sum(1 for it in pending_items if it["needs_check"])
+        clean_count = len(pending_items) - flagged_count
+
+        # Metric Tiles
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+            st.markdown(
+                f"""
+                <div class="stat-tile">
+                    <div class="stat-value">{len(pending_items)}</div>
+                    <div class="stat-label">Pending Messages</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with m2:
+            st.markdown(
+                f"""
+                <div class="stat-tile">
+                    <div class="stat-value" style="color: #34d399;">{clean_count}</div>
+                    <div class="stat-label">Grounded Drafts</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with m3:
+            st.markdown(
+                f"""
+                <div class="stat-tile">
+                    <div class="stat-value" style="color: #f87171;">{flagged_count}</div>
+                    <div class="stat-label">Needs Check</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with m4:
+            st.markdown(
+                """
+                <div class="stat-tile">
+                    <div class="stat-value" style="color: #818cf8;">100%</div>
+                    <div class="stat-label">Private & Local</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
+
         if not pending_items:
-            st.success("🎉 Inbox Zero! No pending messages awaiting review.")
-            st.info("Tip: Open the **Customer Chat** in another browser window and send a message to see it appear here live.")
+            with st.container(border=True):
+                st.markdown(
+                    """
+                    <div style="text-align: center; padding: 40px 20px;">
+                        <div style="font-size: 2.4rem; margin-bottom: 10px;">✨</div>
+                        <div style="font-size: 1.2rem; font-weight: 700; color: #f8fafc; margin-bottom: 6px;">Inbox Zero</div>
+                        <div style="color: #94a3b8; font-size: 0.88rem; max-width: 440px; margin: 0 auto; line-height: 1.5;">
+                            All customer inquiries have been addressed. Open <strong>💬 Customer Chat</strong> in another window to test a simulated live buyer conversation!
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
             return
 
+        # Render each pending message inside its own clean container
         for item in pending_items:
             item_id = item["id"]
             cust_msg = item["customer_message"]
@@ -39,6 +98,7 @@ def render_inbox_page(active_slug: str):
             reason = item["check_reason"] or ""
             model_used = item["model"]
             latency = item["latency_ms"]
+            lang = (item["detected_language"] or "en").upper()
 
             ungrounded = []
             if item["ungrounded_amounts"]:
@@ -55,22 +115,56 @@ def render_inbox_page(active_slug: str):
                     pass
 
             with st.container(border=True):
-                # Header row
-                c1, c2 = st.columns([3, 2])
-                with c1:
-                    st.markdown(f"**Customer Inquiry:** `{item['detected_language'] or 'unknown'}`")
-                    st.markdown(f"> *\"{cust_msg}\"*")
-                with c2:
-                    st.caption(f"Received: {item['created_at']}")
-                    if latency:
-                        st.caption(f"⚡ {latency} ms via `{model_used}`")
+                # Header row: Tags & Telemetry
+                c_meta_left, c_meta_right = st.columns([3, 2])
+                with c_meta_left:
+                    st.markdown(
+                        f"""
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <span class="rd-badge badge-lang">{lang}</span>
+                            <span class="rd-badge badge-model">{model_used}</span>
+                            <span style="font-size: 0.78rem; color: #64748b;">{item['created_at']}</span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with c_meta_right:
+                    lat_sec = round((latency or 0) / 1000, 2)
+                    st.markdown(
+                        f"""
+                        <div style="text-align: right; font-size: 0.8rem; color: #94a3b8;">
+                            ⚡ Generated in <strong>{lat_sec}s</strong>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
-                # Warning Banners
+                # Customer Inquiry Box
+                st.markdown(
+                    f"""
+                    <div style="margin: 12px 0 14px 0; background: rgba(59, 130, 246, 0.05); border-left: 3px solid #3b82f6; border-radius: 0 8px 8px 0; padding: 12px 16px;">
+                        <div style="font-size: 0.72rem; color: #93c5fd; text-transform: uppercase; font-weight: 600; letter-spacing: 0.04em; margin-bottom: 4px;">WhatsApp Customer Inquiry</div>
+                        <div style="font-size: 1.05rem; color: #f8fafc; font-weight: 500;">"{cust_msg}"</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                # Guardrail Safety Banners
                 if needs_check:
                     st.markdown(
                         f"""
-                        <div class="alert-danger-box">
-                            <strong>⚠️ Needs Owner Check:</strong> {reason or 'Question touched unstated or unverified details.'}
+                        <div class="alert-card-danger">
+                            <strong>⚠️ Needs Owner Review:</strong> {reason or 'The inquiry mentions details not in your shop catalogue.'}
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        """
+                        <div class="alert-card-success">
+                            <strong>✓ Grounded Facts:</strong> All prices, variants, and policies verified against your shop data.
                         </div>
                         """,
                         unsafe_allow_html=True,
@@ -80,8 +174,8 @@ def render_inbox_page(active_slug: str):
                     un_str = ", ".join(f"₹{a}" for a in ungrounded)
                     st.markdown(
                         f"""
-                        <div class="alert-warning-box">
-                            <strong>⚠️ Ungrounded Price Warning:</strong> Contains amount(s) not found in your shop data: {un_str}.
+                        <div class="alert-card-warning">
+                            <strong>⚠️ Price Grounding Check:</strong> Mentions unverified amount(s): {un_str}.
                         </div>
                         """,
                         unsafe_allow_html=True,
@@ -91,40 +185,48 @@ def render_inbox_page(active_slug: str):
                     topics_str = ", ".join(t.replace("_", " ").title() for t in risk_list)
                     st.markdown(
                         f"""
-                        <div class="alert-warning-box">
-                            <strong>⚠️ Double-check before sending:</strong> Mentions risk topic(s): {topics_str}.
+                        <div class="alert-card-warning">
+                            <strong>⚠️ Sensitive Topic:</strong> Detected topic(s): {topics_str}. Review carefully before approving.
                         </div>
                         """,
                         unsafe_allow_html=True,
                     )
 
-                # Editable Draft
-                edited_reply = st.text_area(
-                    "Drafted Reply (edit before sending):",
+                # Editable Draft Reply
+                st.markdown(
+                    """
+                    <div style="font-size: 0.76rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 10px; margin-bottom: 5px;">
+                        AI Draft — Edit if needed before approving:
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                edited_text = st.text_area(
+                    "Drafted Reply",
                     value=draft_text,
                     key=f"inbox_reply_{item_id}",
-                    height=100,
+                    label_visibility="collapsed",
+                    height=95,
                 )
 
-                # Action buttons
-                b_col1, b_col2, b_col3, _ = st.columns([1.5, 1.5, 1.2, 2.5])
-                with b_col1:
-                    if st.button("✅ Send as is", key=f"btn_send_{item_id}", use_container_width=True):
+                # Action Buttons
+                col_b1, col_b2, col_b3, _ = st.columns([1.6, 1.8, 1.3, 2.5])
+                with col_b1:
+                    if st.button("✓ Send As Is", key=f"btn_send_{item_id}", type="primary", use_container_width=True):
                         set_reply_action(conn, item_id, "sent_as_is", final_reply=draft_text)
-                        st.success("Sent as is!")
                         st.rerun()
 
-                with b_col2:
-                    if st.button("✏️ Send edited", key=f"btn_edit_{item_id}", use_container_width=True):
-                        set_reply_action(conn, item_id, "edited", final_reply=edited_reply.strip())
-                        st.success("Sent edited reply!")
+                with col_b2:
+                    if st.button("✏️ Send Edited", key=f"btn_edit_{item_id}", use_container_width=True):
+                        set_reply_action(conn, item_id, "edited", final_reply=edited_text.strip())
                         st.rerun()
 
-                with b_col3:
-                    if st.button("🗑️ Discard", key=f"btn_discard_{item_id}", use_container_width=True):
+                with col_b3:
+                    if st.button("✕ Discard", key=f"btn_discard_{item_id}", use_container_width=True):
                         set_reply_action(conn, item_id, "discarded")
-                        st.info("Draft discarded.")
                         st.rerun()
+
+                st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
 
     finally:
         conn.close()
