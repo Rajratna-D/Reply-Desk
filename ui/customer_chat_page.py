@@ -13,17 +13,26 @@ def send_customer_message(active_slug: str, message_text: str):
         return
     with st.spinner("Delivering message to shop inbox..."):
         try:
-            draft_reply(
+            draft = draft_reply(
                 seller_slug=active_slug,
                 message=clean_msg,
                 seller_action=None,  # Pending owner review
             )
+            if draft.reply_id:
+                if "customer_reply_ids" not in st.session_state:
+                    st.session_state["customer_reply_ids"] = []
+                st.session_state["customer_reply_ids"].append(draft.reply_id)
             st.rerun()
         except Exception as e:
             st.error(f"Error drafting reply: {e}")
 
 
 def render_customer_chat_page(active_slug: str):
+    if "customer_reply_ids" not in st.session_state:
+        st.session_state["customer_reply_ids"] = []
+
+    session_ids = st.session_state["customer_reply_ids"]
+
     conn = connect()
     try:
         seller = get_seller_by_slug(conn, active_slug)
@@ -32,9 +41,19 @@ def render_customer_chat_page(active_slug: str):
             return
 
         seller_id = seller["id"]
-        # Fetch conversation stream from SQLite (last 20 messages, chronological order)
-        raw_history = list_history(conn, seller_id, action_filter="all", limit=20)
-        chat_messages = list(reversed(raw_history))
+        chat_messages = []
+        if session_ids:
+            # Fetch only messages sent from this browser session
+            placeholders = ",".join("?" for _ in session_ids)
+            query = f"""
+                SELECT id, seller_id, customer_message, drafted_reply, final_reply,
+                       seller_action, created_at
+                FROM reply_log
+                WHERE seller_id = ? AND id IN ({placeholders})
+                ORDER BY id ASC
+            """
+            rows = conn.execute(query, [seller_id] + session_ids).fetchall()
+            chat_messages = [dict(r) for r in rows]
     finally:
         conn.close()
 
@@ -206,6 +225,10 @@ def render_customer_chat_page(active_slug: str):
 
             if st.button("🌐 Hindi / Hinglish Message", use_container_width=True, help="Sends a message in Hinglish"):
                 send_customer_message(active_slug, "Bhaiya ye product Mumbai deliver ho sakta hai kya aur kitna time lagega?")
+
+            if st.button("🗑️ Reset Chat View", use_container_width=True, help="Clears message history for this browser session"):
+                st.session_state["customer_reply_ids"] = []
+                st.rerun()
 
             st.divider()
 
