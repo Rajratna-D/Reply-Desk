@@ -88,7 +88,7 @@ The user message is the raw customer message, passed as-is with no extra instruc
 ### Policies block
 
 ```
-- {TOPIC} — {title}: {body}
+- {TOPIC} - {title}: {body}
 ```
 
 ### Examples block

@@ -142,7 +142,7 @@ def build_context(
 
     for pol in policy_rows:
         topic_upper = pol["topic"].upper()
-        policy_lines.append(f"- {topic_upper} — {pol['title']}: {pol['body']}")
+        policy_lines.append(f"- {topic_upper} - {pol['title']}: {pol['body']}")
         for amt in extract_amounts(pol["body"]):
             known_amounts.add(amt)
 

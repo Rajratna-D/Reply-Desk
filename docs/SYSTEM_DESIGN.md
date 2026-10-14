@@ -1,4 +1,4 @@
-# System design — ReplyDesk
+# System design - ReplyDesk
 
 Companion docs: `PRD.md` (what), `ARCHITECTURE.md` (modules), `DBMS.md` (data), `PROMPTS.md` (model behaviour).
 

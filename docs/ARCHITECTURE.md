@@ -1,4 +1,4 @@
-# Architecture — ReplyDesk
+# Architecture - ReplyDesk
 
 This document is about code structure: modules, interfaces, and folders. For the why, see `SYSTEM_DESIGN.md`. For tables, see `DBMS.md`.
 

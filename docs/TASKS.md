@@ -4,7 +4,7 @@ Dates are IST. Challenge deadline: 18 Oct 11:59 PM PDT (19 Oct about 12:29 PM IS
 
 Rule: work one milestone at a time. Tick boxes as you finish. Add a dated line to `docs/BUILD_LOG.md` after each milestone.
 
-## M0 — Setup (14 Oct)
+## M0 - Setup (14 Oct)
 
 - [x] Create the git repo. First commit must be on or after 12 Oct (challenge window).
 - [x] Add `.gitignore`, `requirements.txt` (`streamlit`, `ollama`, `jsonschema`, `pytest`, `python-dotenv`).
@@ -12,7 +12,7 @@ Rule: work one milestone at a time. Tick boxes as you finish. Add a dated line t
 - [x] Record hardware, tag names, and `ollama ps` output in `docs/SETUP.md` and `docs/BUILD_LOG.md`.
 - [ ] Send messages to 10 to 15 possible sellers (see "First user" below).
 
-## M1 — Engine core (14 to 15 Oct)
+## M1 - Engine core (14 to 15 Oct)
 
 - [x] `engine/config.py`: settings from environment.
 - [x] `engine/db.py`: `init` creates the database from `db/schema.sql`; connection helper with `PRAGMA foreign_keys = ON`.
@@ -25,7 +25,7 @@ Rule: work one milestone at a time. Tick boxes as you finish. Add a dated line t
 - [x] Tests for importer, retrieval, and guardrails (no model needed). A smoke test that calls the model, skipped if Ollama is not running.
 - [x] Done when: running `draft_reply` from a script on the three sample shops gives sensible replies.
 
-## M2 — UI (15 to 16 Oct)
+## M2 - UI (15 to 16 Oct)
 
 - [x] `app.py` with pages: Reply, Setup, History, Settings, plus Customer Chat (simulated) and Owner Inbox.
 - [x] Setup page: shop details, products (form and CSV), policies, sample replies, import/export JSON.
@@ -37,7 +37,7 @@ Rule: work one milestone at a time. Tick boxes as you finish. Add a dated line t
 - [x] Side-by-side demo verification (two localhost windows: owner left, customer right).
 - [x] Done when: a non-technical person could set up a shop, receive simulated messages in their inbox, and review/send replies without help.
 
-## M3 — Evaluation (16 Oct)
+## M3 - Evaluation (16 Oct)
 
 - [ ] `eval/run_eval.py` runs every case in `eval/questions.json` and writes to `eval_runs` / `eval_results` plus a CSV and markdown report.
 - [ ] Run on the smallest model, then the next size up. Record results in `docs/BUILD_LOG.md`.
@@ -52,12 +52,12 @@ Rule: work one milestone at a time. Tick boxes as you finish. Add a dated line t
 - [ ] Let them try it. Record what they said, whether they would pay, and what they asked for next. Real quotes only, with permission.
 - [ ] If nobody replies by 16 Oct: use the fictional sample shops and say so clearly in the post. Do not invent a user.
 
-## Hack Day — 17 Oct (Pune, in person)
+## Hack Day - 17 Oct (Pune, in person)
 
 - [ ] This is a separate event with its own challenge revealed on the day. Use it to learn and network. Anything built there is a separate project and is not part of this submission unless it was genuinely started and finished inside the challenge window and fits the theme.
 - [ ] Evening: gather any seller feedback.
 
-## M4 — Write-up and submit (17 to 18 Oct)
+## M4 - Write-up and submit (17 to 18 Oct)
 
 - [ ] Optional: demo hosting. If using a `.tech` domain, claim it at hacktoberfest.com/my/promos.
 - [ ] Record a 2 to 3 minute demo video using two browser windows side by side (owner left, customer right).

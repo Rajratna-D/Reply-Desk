@@ -14,7 +14,7 @@ from ui.setup_page import render_setup_page
 from ui.styles import apply_custom_styles
 
 st.set_page_config(
-    page_title="ReplyDesk — Local AI Customer Assistant",
+    page_title="ReplyDesk - Local AI Customer Assistant",
     page_icon="🛍️",
     layout="wide",
     initial_sidebar_state="expanded",

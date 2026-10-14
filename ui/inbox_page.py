@@ -196,7 +196,7 @@ def render_inbox_page(active_slug: str):
                 st.markdown(
                     """
                     <div style="font-size: 0.76rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 10px; margin-bottom: 5px;">
-                        AI Draft — Edit if needed before approving:
+                        AI Draft - Edit if needed before approving:
                     </div>
                     """,
                     unsafe_allow_html=True,

@@ -44,7 +44,7 @@ def render_customer_chat_page(active_slug: str):
     st.markdown(
         """
         <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 8px 14px; font-size: 0.84rem; color: #6ee7b7; display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
-            <span>📱 <strong>Simulated Customer Messenger</strong> — Place this window on the right half of your screen for the split-screen demo.</span>
+            <span>📱 <strong>Simulated Customer Messenger</strong> - Place this window on the right half of your screen for the split-screen demo.</span>
             <span style="font-size: 0.76rem; color: #94a3b8;">Local SQLite • Zero external APIs</span>
         </div>
         """,

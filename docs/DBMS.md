@@ -1,4 +1,4 @@
-# Database design (DBMS) — ReplyDesk
+# Database design (DBMS) - ReplyDesk
 
 Engine: SQLite 3 (Python standard library `sqlite3`). One file per installation (`data/replydesk.db`). The authoritative DDL is `db/schema.sql`; this document explains it. If they disagree, fix them together and add a migration note below.
 

@@ -1,4 +1,4 @@
-# Product requirements — ReplyDesk
+# Product requirements - ReplyDesk
 
 ## Problem
 

@@ -1,4 +1,4 @@
-# AGENTS.md — ReplyDesk
+# AGENTS.md - ReplyDesk
 
 Read this file first, then the docs listed under "Read next". Do not start coding until you have summarized the project back to the user and proposed a plan.
 
@@ -41,6 +41,7 @@ pytest
 6. **Keep scope small.** No login, no accounts, no WhatsApp/Instagram integration, no payments, no analytics dashboards. See "Out of scope" in `docs/PRD.md`.
 7. **Do not invent facts about the project.** Do not claim benchmark results, latency, or user feedback that have not been measured and recorded in `docs/BUILD_LOG.md`.
 8. **Ask before** adding a dependency, changing the database schema, or changing the config format. Schema changes need a migration note in `docs/DBMS.md`.
+9. **No em dashes.** Never use em dashes (`—`) anywhere in this project (code, UI text, markdown, commit messages). Use standard hyphens (`-`), colons, or commas instead. See `.agent/rules/no-em-dash.md`.
 
 ## Conventions
 

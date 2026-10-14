@@ -2,7 +2,7 @@
 
 Purpose: raw material for the DEV post. Record decisions, bugs, fixes, and real measurements as they happen. Add one dated line at a time. Do not write down numbers that were not measured. The agent and the developer both append here.
 
-Format: `YYYY-MM-DD HH:MM IST — [type] note` where type is one of `decision`, `bug`, `fix`, `measurement`, `user`, `note`.
+Format: `YYYY-MM-DD HH:MM IST - [type] note` where type is one of `decision`, `bug`, `fix`, `measurement`, `user`, `note`.
 
 ## Facts to capture for the write-up
 
@@ -17,11 +17,11 @@ Format: `YYYY-MM-DD HH:MM IST — [type] note` where type is one of `decision`, 
 
 ## Log
 
-- 2026-10-14 — [decision] Chose to build ReplyDesk: a configurable customer-reply assistant for small sellers (English, Hindi, Marathi, Hinglish). Local model via Ollama, SQLite storage, Streamlit UI.
-- 2026-10-14 — [decision] Scope kept small: draft-only, no integrations, no accounts. Seller always reviews.
-- 2026-10-14 — [note] Docs, schema, three fictional sample shops, and 25 eval questions drafted before coding. Repo created on 2026-10-14 (inside the challenge window which started 2026-10-12).
-- 2026-10-14 09:55 IST — [decision] Added simulated customer chat and owner inbox pages for side-by-side demo. reply_log acts as the message queue (seller_action IS NULL for pending review). Verified that no database schema change is needed.
-- 2026-10-14 10:05 IST — [measurement] Milestone 1 completed. 18 pytest unit tests passed (including live smoke test on local Ollama server). Verified draft_reply across Urban Thread (8.3s), Sweet Crumbs (7.7s), and Kalakruti Jewels (7.2s). Verified needs_check correctly triggers on custom work.
-- 2026-10-14 10:18 IST — [measurement] Verified gemma2:2b on RTX 3050 Laptop 6 GB. ollama ps: 1.9 GB size, 100% GPU offload, NUM_CTX=4096. Token generation speed: 68.7 tokens/sec. Latency per draft: Sweet Crumbs (3.6s), Kalakruti Jewels (3.5s). All 18 pytest tests pass in 6.77s.
-- 2026-10-14 10:35 IST — [note] Milestone 2 completed. Streamlit UI with Customer Chat simulator, Owner Inbox queue, manual Reply scratchpad, Setup & catalogue editor (form & CSV), History audit, and Settings built and running on localhost:8501.
-- 2026-10-14 11:05 IST — [fix] Complete UI overhaul to eliminate Streamlit prototype aesthetics and 'AI slop'. Added .streamlit/config.toml (dark base, emerald #10b981 primary, minimal toolbar). Fixed Streamlit React DOM unclosed markdown div bug. Converted sidebar radio buttons to Linear-style menu items. Styled customer chat simulator with WhatsApp-like messenger frame, green chat bubbles, and internal scroll container. Refined inbox triage cards, high-contrast editable textareas, and telemetry widgets. All 18 pytest tests pass.
+- 2026-10-14 - [decision] Chose to build ReplyDesk: a configurable customer-reply assistant for small sellers (English, Hindi, Marathi, Hinglish). Local model via Ollama, SQLite storage, Streamlit UI.
+- 2026-10-14 - [decision] Scope kept small: draft-only, no integrations, no accounts. Seller always reviews.
+- 2026-10-14 - [note] Docs, schema, three fictional sample shops, and 25 eval questions drafted before coding. Repo created on 2026-10-14 (inside the challenge window which started 2026-10-12).
+- 2026-10-14 09:55 IST - [decision] Added simulated customer chat and owner inbox pages for side-by-side demo. reply_log acts as the message queue (seller_action IS NULL for pending review). Verified that no database schema change is needed.
+- 2026-10-14 10:05 IST - [measurement] Milestone 1 completed. 18 pytest unit tests passed (including live smoke test on local Ollama server). Verified draft_reply across Urban Thread (8.3s), Sweet Crumbs (7.7s), and Kalakruti Jewels (7.2s). Verified needs_check correctly triggers on custom work.
+- 2026-10-14 10:18 IST - [measurement] Verified gemma2:2b on RTX 3050 Laptop 6 GB. ollama ps: 1.9 GB size, 100% GPU offload, NUM_CTX=4096. Token generation speed: 68.7 tokens/sec. Latency per draft: Sweet Crumbs (3.6s), Kalakruti Jewels (3.5s). All 18 pytest tests pass in 6.77s.
+- 2026-10-14 10:35 IST - [note] Milestone 2 completed. Streamlit UI with Customer Chat simulator, Owner Inbox queue, manual Reply scratchpad, Setup & catalogue editor (form & CSV), History audit, and Settings built and running on localhost:8501.
+- 2026-10-14 11:05 IST - [fix] Complete UI overhaul to eliminate Streamlit prototype aesthetics and 'AI slop'. Added .streamlit/config.toml (dark base, emerald #10b981 primary, minimal toolbar). Fixed Streamlit React DOM unclosed markdown div bug. Converted sidebar radio buttons to Linear-style menu items. Styled customer chat simulator with WhatsApp-like messenger frame, green chat bubbles, and internal scroll container. Refined inbox triage cards, high-contrast editable textareas, and telemetry widgets. All 18 pytest tests pass.
