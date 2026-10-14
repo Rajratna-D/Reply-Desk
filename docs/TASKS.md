@@ -27,15 +27,15 @@ Rule: work one milestone at a time. Tick boxes as you finish. Add a dated line t
 
 ## M2 — UI (15 to 16 Oct)
 
-- [ ] `app.py` with pages: Reply, Setup, History, Settings, plus Customer Chat (simulated) and Owner Inbox.
-- [ ] Setup page: shop details, products (form and CSV), policies, sample replies, import/export JSON.
-- [ ] Reply page: paste message, generate, needs-check banner, editable draft, copy, mark sent/edited/discarded.
-- [ ] Customer Chat page (simulated demo): select shop, type message in En/Hi/Mr/Hinglish, immediate draft generation, pending status in `reply_log`, memory session tracking in `st.session_state`, "Simulated chat for demo" label.
-- [ ] Owner Inbox page: pending drafts queue (`seller_action IS NULL`), customer message, editable draft, needs-check & risk warnings, action buttons (Send as is, Send edited, Discard), refresh button & `st.fragment(run_every=...)`.
-- [ ] Shop selector (switches active shop without login; replies never cross shop boundaries).
-- [ ] Friendly error if Ollama is not running or model is missing.
-- [ ] Side-by-side demo verification (two localhost windows: owner left, customer right).
-- [ ] Done when: a non-technical person could set up a shop, receive simulated messages in their inbox, and review/send replies without help.
+- [x] `app.py` with pages: Reply, Setup, History, Settings, plus Customer Chat (simulated) and Owner Inbox.
+- [x] Setup page: shop details, products (form and CSV), policies, sample replies, import/export JSON.
+- [x] Reply page: paste message, generate, needs-check banner, editable draft, copy, mark sent/edited/discarded.
+- [x] Customer Chat page (simulated demo): select shop, type message in En/Hi/Mr/Hinglish, immediate draft generation, pending status in `reply_log`, memory session tracking in `st.session_state`, "Simulated chat for demo" label.
+- [x] Owner Inbox page: pending drafts queue (`seller_action IS NULL`), customer message, editable draft, needs-check & risk warnings, action buttons (Send as is, Send edited, Discard), refresh button & `st.fragment(run_every=...)`.
+- [x] Shop selector (switches active shop without login; replies never cross shop boundaries).
+- [x] Friendly error if Ollama is not running or model is missing.
+- [x] Side-by-side demo verification (two localhost windows: owner left, customer right).
+- [x] Done when: a non-technical person could set up a shop, receive simulated messages in their inbox, and review/send replies without help.
 
 ## M3 — Evaluation (16 Oct)
 
