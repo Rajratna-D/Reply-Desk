@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/replydesk/seller.schema.json",
+  "title": "ReplyDesk seller config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "shop", "products", "policies", "sample_replies"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "meta": { "type": "object" },
+    "shop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slug", "name", "tone", "default_language", "languages"],
+      "properties": {
+        "slug": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "tone": { "type": "string", "minLength": 1 },
+        "default_language": { "$ref": "#/$defs/language" },
+        "languages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/language" }
+        }
+      }
+    },
+    "products": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/product" }
+    },
+    "policies": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/policy" }
+    },
+    "sample_replies": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 6,
+      "items": { "$ref": "#/$defs/sample_reply" }
+    }
+  },
+  "$defs": {
+    "language": { "enum": ["en", "hi", "mr", "hinglish"] },
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sku", "name", "stock_status", "variants"],
+      "properties": {
+        "sku": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "attributes": { "type": "object" },
+        "stock_status": { "enum": ["in_stock", "low_stock", "out_of_stock", "made_to_order"] },
+        "notes": { "type": "string" },
+        "variants": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "price_inr"],
+            "properties": {
+              "label": { "type": "string", "minLength": 1 },
+              "price_inr": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["topic", "title", "body"],
+      "properties": {
+        "topic": { "enum": ["delivery", "returns", "payment", "hours", "ordering", "other"] },
+        "title": { "type": "string", "minLength": 1 },
+        "body": { "type": "string", "minLength": 1 }
+      }
+    },
+    "sample_reply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "customer_message", "reply"],
+      "properties": {
+        "language": { "$ref": "#/$defs/language" },
+        "customer_message": { "type": "string", "minLength": 1 },
+        "reply": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

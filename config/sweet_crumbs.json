@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "meta": { "fictional_sample": true },
+  "shop": {
+    "slug": "sweet_crumbs",
+    "name": "Sweet Crumbs",
+    "description": "Home bakery in Baner, Pune. Cakes, brownies and cupcakes baked to order.",
+    "tone": "Warm and polite, with a little more detail than a one-liner. Uses 'ji' in Hindi and Hinglish.",
+    "default_language": "en",
+    "languages": ["en", "hi", "mr", "hinglish"]
+  },
+  "products": [
+    {
+      "sku": "SC-201",
+      "name": "Chocolate Truffle Cake",
+      "category": "Cake",
+      "attributes": { "flavour": "chocolate", "eggless": "available at the same price" },
+      "stock_status": "made_to_order",
+      "notes": "Order at least 2 days in advance. A custom message on the cake is free.",
+      "variants": [
+        { "label": "500 g", "price_inr": 650 },
+        { "label": "1 kg", "price_inr": 1200 }
+      ]
+    },
+    {
+      "sku": "SC-202",
+      "name": "Red Velvet Cake",
+      "category": "Cake",
+      "attributes": { "flavour": "red velvet", "eggless": "available at the same price" },
+      "stock_status": "made_to_order",
+      "notes": "Order at least 2 days in advance. A custom message on the cake is free.",
+      "variants": [
+        { "label": "500 g", "price_inr": 750 },
+        { "label": "1 kg", "price_inr": 1400 }
+      ]
+    },
+    {
+      "sku": "SC-203",
+      "name": "Brownie Box",
+      "category": "Brownies",
+      "stock_status": "made_to_order",
+      "notes": "Baked fresh; order 1 day in advance. Contains wheat flour, dairy, eggs, and walnuts.",
+      "variants": [{ "label": "Box of 6", "price_inr": 420 }]
+    },
+    {
+      "sku": "SC-204",
+      "name": "Cupcake Box",
+      "category": "Cupcakes",
+      "attributes": { "flavours": ["vanilla", "chocolate", "mixed"] },
+      "stock_status": "made_to_order",
+      "notes": "Baked fresh; order 1 day in advance. Choose vanilla, chocolate, or a mix.",
+      "variants": [{ "label": "Box of 6", "price_inr": 360 }]
+    }
+  ],
+  "policies": [
+    { "topic": "ordering", "title": "Advance notice", "body": "Cakes need at least 2 days' notice. Brownies and cupcakes need 1 day's notice." },
+    { "topic": "delivery", "title": "Delivery area and charge", "body": "Free delivery within 5 km of Baner for orders of ₹800 and above. ₹50 delivery charge for orders below ₹800 within 5 km. Beyond 5 km, the customer arranges pickup or a delivery partner." },
+    { "topic": "payment", "title": "Advance payment", "body": "50% advance by UPI to confirm a cake order. The balance is paid on delivery by UPI or cash." },
+    { "topic": "returns", "title": "Cancellation", "body": "If a cake order is cancelled within 24 hours of the delivery time, the advance is not refunded." },
+    { "topic": "hours", "title": "Open days and hours", "body": "Open 9 AM to 7 PM, Tuesday to Sunday. Closed on Mondays." }
+  ],
+  "sample_replies": [
+    {
+      "language": "en",
+      "customer_message": "Can I get 'Happy Birthday Riya' written on the cake?",
+      "reply": "Of course! A custom message on the cake is free of charge. Just share the exact text when you place the order."
+    },
+    {
+      "language": "hinglish",
+      "customer_message": "Cupcake ka box kitne ka hai?",
+      "reply": "Ji, 6 cupcakes ka box ₹360 ka hai. Vanilla, chocolate ya mix, jo aapko pasand ho."
+    },
+    {
+      "language": "hi",
+      "customer_message": "पेमेंट कैसे करना होगा?",
+      "reply": "जी, केक का ऑर्डर कन्फर्म करने के लिए 50% एडवांस UPI से देना होता है। बाकी रकम डिलीवरी पर UPI या कैश से दे सकते हैं।"
+    },
+    {
+      "language": "mr",
+      "customer_message": "रविवारी ऑर्डर घेता का?",
+      "reply": "हो, आम्ही रविवारी खुले असतो. सकाळी ९ ते संध्याकाळी ७ पर्यंत."
+    }
+  ]
+}

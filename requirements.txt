@@ -1,0 +1,5 @@
+streamlit
+ollama
+jsonschema
+python-dotenv
+pytest

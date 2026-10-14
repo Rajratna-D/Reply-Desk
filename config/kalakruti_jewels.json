@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "meta": { "fictional_sample": true },
+  "shop": {
+    "slug": "kalakruti_jewels",
+    "name": "Kalakruti Jewels",
+    "description": "Handmade resin and oxidised jewellery made in Pune, sold on Instagram.",
+    "tone": "Casual and cheerful. Fine to mix English and Hindi in Hinglish replies. A couple of emojis are fine.",
+    "default_language": "en",
+    "languages": ["en", "hi", "mr", "hinglish"]
+  },
+  "products": [
+    {
+      "sku": "KJ-301",
+      "name": "Oxidised Jhumka",
+      "category": "Earrings",
+      "description": "Handmade oxidised jhumka earrings.",
+      "stock_status": "in_stock",
+      "variants": [{ "label": "Pair", "price_inr": 249 }]
+    },
+    {
+      "sku": "KJ-302",
+      "name": "Resin Flower Pendant",
+      "category": "Pendants",
+      "description": "Handmade pendant with a real-flower look set in resin.",
+      "stock_status": "made_to_order",
+      "notes": "Made to order in 3 days. Custom colour available for ₹50 extra and adds 2 days.",
+      "variants": [{ "label": "Standard", "price_inr": 399 }]
+    },
+    {
+      "sku": "KJ-303",
+      "name": "Jewellery Gift Set",
+      "category": "Sets",
+      "description": "Necklace and earrings set.",
+      "stock_status": "low_stock",
+      "notes": "Comes in a gift box.",
+      "variants": [{ "label": "Set", "price_inr": 899 }]
+    },
+    {
+      "sku": "KJ-304",
+      "name": "Anklet Pair",
+      "category": "Anklets",
+      "stock_status": "out_of_stock",
+      "notes": "Restock date not decided.",
+      "variants": [{ "label": "Pair", "price_inr": 199 }]
+    }
+  ],
+  "policies": [
+    { "topic": "delivery", "title": "Shipping", "body": "Ships across India by courier in 3 to 5 days. ₹70 flat shipping. Free shipping on orders of ₹1,000 and above." },
+    { "topic": "returns", "title": "Damaged items", "body": "Returns only for damaged items. Send an unboxing video within 24 hours of delivery. No returns for change of mind." },
+    { "topic": "payment", "title": "Payment", "body": "UPI only, paid in advance. Cash on delivery is not available." },
+    { "topic": "ordering", "title": "Resin pendants", "body": "Made to order in 3 days. Custom colour is ₹50 extra and adds 2 days." }
+  ],
+  "sample_replies": [
+    {
+      "language": "en",
+      "customer_message": "How long does shipping take?",
+      "reply": "Shipping takes 3 to 5 days across India by courier. It's a flat ₹70, and free on orders of ₹1,000 and above! 📦"
+    },
+    {
+      "language": "hinglish",
+      "customer_message": "Gift set me box milta hai?",
+      "reply": "Haan ji! Gift set ek gift box me aata hai 🎁"
+    },
+    {
+      "language": "hi",
+      "customer_message": "रेज़िन पेंडेंट बनने में कितना समय लगता है?",
+      "reply": "रेज़िन फ्लावर पेंडेंट ऑर्डर पर बनता है, इसमें 3 दिन लगते हैं।"
+    },
+    {
+      "language": "mr",
+      "customer_message": "तुम्ही सगळीकडे पाठवता का?",
+      "reply": "हो, आम्ही कुरिअरने संपूर्ण भारतात पाठवतो. ३ ते ५ दिवस लागतात."
+    }
+  ]
+}

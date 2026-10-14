@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "meta": { "fictional_sample": true },
+  "shop": {
+    "slug": "urban_thread",
+    "name": "Urban Thread",
+    "description": "Women's cotton kurtis and basics from Pune. Ready stock, shipped across India.",
+    "tone": "Friendly and short. Uses 'ji' when replying in Hindi or Hinglish. At most one emoji.",
+    "default_language": "en",
+    "languages": ["en", "hi", "mr", "hinglish"]
+  },
+  "products": [
+    {
+      "sku": "UT-101",
+      "name": "Cotton Kurti",
+      "category": "Kurti",
+      "description": "Everyday straight-cut cotton kurti.",
+      "attributes": { "sizes": ["S", "M", "L", "XL"], "colors": ["Blue", "Mustard"] },
+      "stock_status": "in_stock",
+      "variants": [{ "label": "All sizes", "price_inr": 899 }]
+    },
+    {
+      "sku": "UT-102",
+      "name": "Anarkali Kurti",
+      "category": "Kurti",
+      "description": "Flared Anarkali-cut kurti.",
+      "attributes": { "sizes": ["M", "L", "XL", "XXL"], "colors": ["Maroon", "Green"] },
+      "stock_status": "in_stock",
+      "variants": [{ "label": "All sizes", "price_inr": 1499 }]
+    },
+    {
+      "sku": "UT-103",
+      "name": "Palazzo Pants",
+      "category": "Bottoms",
+      "description": "Soft cotton palazzo pants.",
+      "attributes": { "sizes": ["Free size"], "colors": ["Black", "White"], "fit": "fits waist 28 to 38 inches" },
+      "stock_status": "low_stock",
+      "variants": [{ "label": "Free size", "price_inr": 599 }]
+    },
+    {
+      "sku": "UT-104",
+      "name": "Cotton Dupatta",
+      "category": "Accessories",
+      "attributes": { "colors": ["Mustard", "Maroon"] },
+      "stock_status": "out_of_stock",
+      "notes": "Restock date not decided.",
+      "variants": [{ "label": "Standard", "price_inr": 349 }]
+    }
+  ],
+  "policies": [
+    { "topic": "delivery", "title": "Delivery time", "body": "Pune: 1 to 2 days. Rest of India: 4 to 6 days." },
+    { "topic": "delivery", "title": "Delivery charge", "body": "₹60 for orders below ₹1,000. Free for orders of ₹1,000 and above." },
+    { "topic": "returns", "title": "Size exchange", "body": "Size exchange within 7 days of delivery if the item is unworn and tags are intact. No returns or refunds on sale items." },
+    { "topic": "payment", "title": "Payment options", "body": "UPI or bank transfer. Cash on delivery is available only in Pune." },
+    { "topic": "hours", "title": "Chat hours", "body": "10 AM to 8 PM, every day." }
+  ],
+  "sample_replies": [
+    {
+      "language": "en",
+      "customer_message": "What colours does the palazzo come in?",
+      "reply": "Hi! The Palazzo Pants come in Black and White, in one free size that fits waists from 28 to 38 inches. Only a few pieces are left, so do let me know soon 😊"
+    },
+    {
+      "language": "hinglish",
+      "customer_message": "Palazzo ka size kya hai?",
+      "reply": "Ji, Palazzo free size hai, kamar 28 se 38 inch tak fit hoti hai."
+    },
+    {
+      "language": "hi",
+      "customer_message": "क्या पलाज़ो सफेद रंग में मिलेगा?",
+      "reply": "जी, पलाज़ो पैंट काले और सफेद रंग में मिलती है। फ्री साइज़ है, कमर 28 से 38 इंच तक फिट होती है।"
+    },
+    {
+      "language": "mr",
+      "customer_message": "तुमची चॅट वेळ काय आहे?",
+      "reply": "आमची चॅट वेळ रोज सकाळी १० ते रात्री ८ आहे."
+    }
+  ]
+}
