@@ -89,9 +89,11 @@ def generate_json(
     # Attempt 1: Try with format=schema (structured outputs)
     use_schema_format = True
     raw_content = ""
+    last_prompt_tokens: int | None = None
+    last_output_tokens: int | None = None
 
     def _call(msgs: list[dict[str, str]], fmt: Any) -> str:
-        nonlocal use_schema_format
+        nonlocal use_schema_format, last_prompt_tokens, last_output_tokens
         try:
             res = client.chat(
                 model=model,
@@ -99,6 +101,8 @@ def generate_json(
                 format=fmt,
                 options=options,
             )
+            last_prompt_tokens = getattr(res, "prompt_eval_count", None) or (res.get("prompt_eval_count") if isinstance(res, dict) else None)
+            last_output_tokens = getattr(res, "eval_count", None) or (res.get("eval_count") if isinstance(res, dict) else None)
             return getattr(res.message, "content", "") if hasattr(res, "message") else res["message"]["content"]
         except Exception as ex:
             err_msg = str(ex).lower()
@@ -121,6 +125,8 @@ def generate_json(
                     format="json",
                     options=options,
                 )
+                last_prompt_tokens = getattr(res, "prompt_eval_count", None) or (res.get("prompt_eval_count") if isinstance(res, dict) else None)
+                last_output_tokens = getattr(res, "eval_count", None) or (res.get("eval_count") if isinstance(res, dict) else None)
                 return getattr(res.message, "content", "") if hasattr(res, "message") else res["message"]["content"]
             raise
 
@@ -136,6 +142,8 @@ def generate_json(
     try:
         parsed = json.loads(cleaned)
         if isinstance(parsed, dict) and "reply" in parsed:
+            parsed["_prompt_tokens"] = last_prompt_tokens
+            parsed["_output_tokens"] = last_output_tokens
             return parsed
     except json.JSONDecodeError:
         pass
@@ -158,6 +166,8 @@ def generate_json(
         cleaned = _clean_json_markdown(raw_content)
         parsed = json.loads(cleaned)
         if isinstance(parsed, dict) and "reply" in parsed:
+            parsed["_prompt_tokens"] = last_prompt_tokens
+            parsed["_output_tokens"] = last_output_tokens
             return parsed
     except (OllamaUnavailable, ModelMissing):
         raise

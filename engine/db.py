@@ -412,10 +412,137 @@ def delete_sample_reply(conn: sqlite3.Connection, sample_id: int) -> None:
         conn.execute("DELETE FROM sample_replies WHERE id = ?;", (sample_id,))
 
 
-def delete_seller(conn: sqlite3.Connection, seller_id: int) -> None:
-    """Delete a seller and all children."""
+def create_eval_run(
+    conn: sqlite3.Connection,
+    model: str,
+    notes: str | None = None,
+) -> int:
+    """Create a new evaluation run record and return run_id."""
     with conn:
-        conn.execute("DELETE FROM sellers WHERE id = ?;", (seller_id,))
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO eval_runs (model, notes, started_at)
+            VALUES (?, ?, datetime('now'));
+            """,
+            (model, notes),
+        )
+        assert cur.lastrowid is not None
+        return cur.lastrowid
+
+
+def record_eval_result(
+    conn: sqlite3.Connection,
+    run_id: int,
+    case_id: str,
+    shop_slug: str,
+    language: str,
+    category: str,
+    split: str | None,
+    reply: str,
+    needs_check: bool,
+    facts_ok: bool,
+    needs_check_ok: bool,
+    language_ok: bool,
+    language_label_ok: bool | None,
+    latency_ms: int,
+    prompt_tokens: int | None = None,
+    output_tokens: int | None = None,
+    tone_score: int | None = None,
+) -> None:
+    """Record a single evaluation test case result."""
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO eval_results (
+                run_id, case_id, shop_slug, language, category, split,
+                reply, needs_check, facts_ok, needs_check_ok, language_ok,
+                language_label_ok, latency_ms, prompt_tokens, output_tokens, tone_score
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(run_id, case_id) DO UPDATE SET
+                reply = excluded.reply,
+                needs_check = excluded.needs_check,
+                facts_ok = excluded.facts_ok,
+                needs_check_ok = excluded.needs_check_ok,
+                language_ok = excluded.language_ok,
+                language_label_ok = excluded.language_label_ok,
+                latency_ms = excluded.latency_ms,
+                prompt_tokens = excluded.prompt_tokens,
+                output_tokens = excluded.output_tokens,
+                tone_score = excluded.tone_score;
+            """,
+            (
+                run_id,
+                case_id,
+                shop_slug,
+                language,
+                category,
+                split,
+                reply,
+                1 if needs_check else 0,
+                1 if facts_ok else 0,
+                1 if needs_check_ok else 0,
+                1 if language_ok else 0,
+                None if language_label_ok is None else (1 if language_label_ok else 0),
+                latency_ms,
+                prompt_tokens,
+                output_tokens,
+                tone_score,
+            ),
+        )
+
+
+def finish_eval_run(conn: sqlite3.Connection, run_id: int) -> None:
+    """Mark an evaluation run as completed with timestamp."""
+    with conn:
+        conn.execute(
+            "UPDATE eval_runs SET finished_at = datetime('now') WHERE id = ?;",
+            (run_id,),
+        )
+
+
+def list_eval_runs(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]:
+    """List past evaluation runs, newest first."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT r.id, r.model, r.notes, r.started_at, r.finished_at,
+               COUNT(res.id) AS total_cases,
+               SUM(res.facts_ok) AS passed_facts,
+               SUM(res.needs_check_ok) AS passed_needs_check,
+               SUM(res.language_ok) AS passed_language,
+               SUM(CASE WHEN res.facts_ok = 1 AND res.needs_check_ok = 1 AND res.language_ok = 1 THEN 1 ELSE 0 END) AS passed_total,
+               AVG(res.latency_ms) AS avg_latency_ms
+        FROM eval_runs r
+        LEFT JOIN eval_results res ON res.run_id = r.id
+        GROUP BY r.id
+        ORDER BY r.id DESC
+        LIMIT ?;
+        """,
+        (limit,),
+    )
+    return cur.fetchall()
+
+
+def get_eval_run(conn: sqlite3.Connection, run_id: int) -> sqlite3.Row | None:
+    """Fetch single evaluation run by id."""
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM eval_runs WHERE id = ?;", (run_id,))
+    return cur.fetchone()
+
+
+def get_eval_results(conn: sqlite3.Connection, run_id: int) -> list[sqlite3.Row]:
+    """Fetch all test case results for an evaluation run."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT * FROM eval_results
+        WHERE run_id = ?
+        ORDER BY id ASC;
+        """,
+        (run_id,),
+    )
+    return cur.fetchall()
 
 
 if __name__ == "__main__":

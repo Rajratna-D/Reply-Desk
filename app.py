@@ -6,6 +6,7 @@ from engine.config import load_settings
 from engine.db import connect, list_sellers
 from engine.llm import ollama_status
 from ui.customer_chat_page import render_customer_chat_page
+from ui.eval_page import render_eval_page
 from ui.history_page import render_history_page
 from ui.inbox_page import render_inbox_page
 from ui.reply_page import render_reply_page
@@ -109,6 +110,7 @@ def main():
             "✍️ Manual Reply": "reply",
             "🏪 Shop Setup": "setup",
             "📜 History": "history",
+            "📊 Benchmarks & Eval": "eval",
             "⚙️ Settings": "settings",
         }
         nav_selection = st.radio(
@@ -181,6 +183,8 @@ def main():
         render_setup_page(active_slug)
     elif page_key == "history":
         render_history_page(active_slug)
+    elif page_key == "eval":
+        render_eval_page(active_slug)
     elif page_key == "settings":
         render_settings_page(active_slug)
 

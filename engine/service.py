@@ -24,6 +24,8 @@ class Draft:
     model: str
     latency_ms: int
     reply_id: int | None = None
+    prompt_tokens: int | None = None
+    output_tokens: int | None = None
 
 
 def draft_reply(
@@ -118,6 +120,8 @@ def draft_reply(
             model=active_model,
             latency_ms=latency_ms,
             reply_id=reply_id,
+            prompt_tokens=raw_result.get("_prompt_tokens"),
+            output_tokens=raw_result.get("_output_tokens"),
         )
     finally:
         conn.close()
