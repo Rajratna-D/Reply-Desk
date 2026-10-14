@@ -13,10 +13,13 @@ Design priorities, in order:
 4. Speed on a 6 GB GPU laptop
 5. Extensibility to other shops without code changes
 
+### Terminology
+ReplyDesk is a **retrieval-grounded generation** tool. In v1 the retrieval step is straightforward: the seller's whole catalogue and policies are compiled into the prompt (no embeddings, no vector database). SQLite FTS5 keyword search is an optional stretch goal for larger catalogues. Do not describe ReplyDesk as a vector-search RAG system anywhere in documentation, code comments, or UI text.
+
 ## 2. Requirements
 
 ### Functional
-See `PRD.md` user stories US1 to US7: set up a shop, draft a reply, review and log, switch shops, history, swap model, evaluate.
+See `PRD.md` user stories US1 to US8: set up a shop, draft a reply, review and log, switch shops (login-free isolation), history, swap model, evaluate, and customer simulator + owner inbox.
 
 ### Non-functional
 
@@ -89,6 +92,27 @@ sequenceDiagram
     UI->>D: update reply_log (seller_action, final_reply)
 ```
 
+### 5.2. Simulated chat & owner inbox flow (demo-only)
+
+```mermaid
+sequenceDiagram
+    participant C as Customer (Browser 1)
+    participant S as Service: draft_reply
+    participant D as SQLite (reply_log)
+    participant O as Owner Inbox (Browser 2)
+
+    C->>S: send message (e.g. price/delivery question)
+    S->>D: insert reply_log (seller_action = NULL, drafted_reply)
+    S-->>C: render "The shop will reply shortly." (session tracks reply_id)
+    O->>D: poll/read pending drafts (seller_action IS NULL)
+    D-->>O: show message, draft, flags, warnings
+    O->>D: owner clicks "Send as is" or "Send edited" (update seller_action, final_reply)
+    C->>D: poll/refresh chat for tracked reply_ids
+    D-->>C: render sent reply (final_reply or drafted_reply)
+```
+
+Limitation: This is purely a local demo simulation across two browser tabs reading the same local SQLite database. It is not connected to WhatsApp, Instagram, or any external messaging API.
+
 ## 6. Key design decisions
 
 **D1. Local inference with Ollama.** Gives privacy, offline use, zero per-reply cost, and model swapping, which are exactly the arguments the challenge asks for. Cost: speed is limited by a laptop GPU.
@@ -108,6 +132,8 @@ sequenceDiagram
 **D8. Numeric grounding check.** After generation, extract every currency amount from the reply and verify it exists in the seller's data. Unknown amounts set `needs_check` with a reason. This is cheap and catches the most damaging failure (a wrong price). It does not verify delivery days or sizes in v1; that limitation is documented.
 
 **D9. Risk-topic soft warning.** Messages that mention allergies, health, discounts, wholesale, or custom work get a separate "double-check before sending" banner in the UI, independent of the model's own `needs_check`.
+
+**D10. Demo simulation using reply_log as message queue.** To demo the end-to-end user experience without building fragile unofficial WhatsApp scrapers or cloud dependencies, `reply_log` acts as a lightweight queue. `seller_action IS NULL` designates pending incoming messages. Customer browser state is isolated in memory with `st.session_state` (no user login or sessions in DB).
 
 ## 7. Capacity and performance
 

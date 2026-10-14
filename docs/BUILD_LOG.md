@@ -20,3 +20,4 @@ Format: `YYYY-MM-DD HH:MM IST — [type] note` where type is one of `decision`, 
 - 2026-10-14 — [decision] Chose to build ReplyDesk: a configurable customer-reply assistant for small sellers (English, Hindi, Marathi, Hinglish). Local model via Ollama, SQLite storage, Streamlit UI.
 - 2026-10-14 — [decision] Scope kept small: draft-only, no integrations, no accounts. Seller always reviews.
 - 2026-10-14 — [note] Docs, schema, three fictional sample shops, and 25 eval questions drafted before coding. Repo created on 2026-10-14 (inside the challenge window which started 2026-10-12).
+- 2026-10-14 09:55 IST — [decision] Added simulated customer chat and owner inbox pages for side-by-side demo. reply_log acts as the message queue (seller_action IS NULL for pending review). Verified that no database schema change is needed.

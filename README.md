@@ -6,6 +6,10 @@ Built for the DEV / MLH Hacktoberfest 2026 Open-Source AI Challenge, Week 2 ("Si
 
 > Status: documentation and design pack. Code is built milestone by milestone following `docs/TASKS.md`.
 
+## Terminology
+
+ReplyDesk is a **retrieval-grounded generation** tool. In v1 the retrieval step is simple: the whole catalogue and policies are placed in the prompt (no embeddings, no vector database). SQLite FTS5 keyword search is an optional stretch for large catalogues. Do not describe it as a vector-search RAG system anywhere in the docs, code comments or UI text.
+
 ## Docs
 
 Start with `AGENTS.md`, then `docs/`:

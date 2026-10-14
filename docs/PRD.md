@@ -25,7 +25,7 @@ Set up your shop once, paste in a customer message, get a ready-to-send reply in
 ## Non-goals (out of scope)
 
 - Login, accounts, multi-user or cloud hosting of seller data
-- WhatsApp or Instagram integration, auto-sending, or reading chats automatically
+- WhatsApp or Instagram integration, auto-sending, or reading chats automatically (the customer chat page is a local simulation for demo purposes only)
 - Payments, orders, inventory sync, analytics dashboards
 - Image understanding (product photos)
 - Fine-tuning (possible later as an extra, not part of the core)
@@ -70,6 +70,18 @@ As a developer or seller, I can change the model name in settings and compare.
 As the developer, I can run a fixed set of test messages and get a results table.
 - `python -m eval.run_eval` runs all cases in `eval/questions.json` against a chosen model and writes results to the database and a markdown/CSV report.
 - Report includes facts-correct, language-correct, needs-check-correct rates and latency (see `docs/EVAL_PLAN.md`).
+
+**US8. Customer chat simulator and owner inbox (demo-only).**
+As a presenter or evaluator, I can demo both the customer experience and shop owner experience side by side in two browser windows on localhost without third-party messaging integrations.
+- Customer Chat page: Allows selecting a shop, typing a customer message in English, Hindi, Marathi, or Hinglish, and viewing sent messages and received replies.
+- Sending immediately generates a draft with `draft_reply()` and stores it in `reply_log` with `seller_action = NULL` (pending). Customer sees "The shop will reply shortly."
+- Customer session remembers its messages in `st.session_state` without creating user accounts or session tables in the database.
+- Customer never sees drafts, needs-check flags, or internal shop facts.
+- A prominent disclaimer states: "Simulated chat for demo. Not connected to WhatsApp or Instagram."
+- Owner Inbox page: Lists pending (`seller_action IS NULL`) drafts for the active shop, newest first, showing customer message, editable draft, needs-check banner with reason, and warnings.
+- Owner actions: "Send as is" (marks `sent_as_is`), "Send edited" (marks `edited`, stores `final_reply`), or "Discard" (marks `discarded`).
+- When the owner sends, the customer chat shows the reply (`final_reply` if present, else `drafted_reply`). If discarded, the customer sees nothing new.
+- Switching shops in the sidebar changes which seller's data is used. Replies for one shop never use another shop's catalogue or policies.
 
 ## Quality requirements
 

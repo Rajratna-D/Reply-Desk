@@ -190,6 +190,36 @@ ORDER BY r.id, e.language;
 ```
 (Median latency is computed in Python; SQLite has no built-in median.)
 
+### 8.1. `reply_log` as a Demo Message Queue
+
+For the demo's simulated customer chat and owner inbox, `reply_log` doubles as an asynchronous message queue without schema changes:
+- Incoming customer messages are inserted with `seller_action = NULL` (pending review).
+- The customer UI tracks its own message IDs in memory (`st.session_state`) and polls their status.
+- The owner inbox queries pending drafts, presents them for review/editing, and updates `seller_action` to `'sent_as_is'`, `'edited'`, or `'discarded'`.
+
+Fetch pending drafts for owner inbox:
+```sql
+SELECT id, customer_message, drafted_reply, needs_check, check_reason,
+       ungrounded_amounts, risk_topics, model, latency_ms, created_at
+FROM reply_log
+WHERE seller_id = ? AND seller_action IS NULL
+ORDER BY created_at DESC;
+```
+
+Resolve a draft (Send or Discard):
+```sql
+UPDATE reply_log
+SET seller_action = ?, final_reply = ?
+WHERE id = ?;
+```
+
+Customer chat polling for a tracked message:
+```sql
+SELECT id, customer_message, drafted_reply, final_reply, seller_action, created_at
+FROM reply_log
+WHERE id = ?;
+```
+
 ## 9. Optional full-text search (stretch)
 
 If a catalogue grows past the prompt budget, add an FTS5 index over `products(name, description)` in `db/fts.sql` with triggers to keep it in sync, and retrieve the top-k products for a message. FTS5 must be available in the installed SQLite build; check with `PRAGMA compile_options;`. Not part of the core schema so the core never fails on a build without FTS5.

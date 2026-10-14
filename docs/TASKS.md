@@ -27,11 +27,15 @@ Rule: work one milestone at a time. Tick boxes as you finish. Add a dated line t
 
 ## M2 — UI (15 to 16 Oct)
 
-- [ ] `app.py` with pages: Reply, Setup, History, Settings.
+- [ ] `app.py` with pages: Reply, Setup, History, Settings, plus Customer Chat (simulated) and Owner Inbox.
 - [ ] Setup page: shop details, products (form and CSV), policies, sample replies, import/export JSON.
 - [ ] Reply page: paste message, generate, needs-check banner, editable draft, copy, mark sent/edited/discarded.
-- [ ] Shop selector. Friendly error if Ollama is not running.
-- [ ] Done when: a non-technical person could set up a shop and get a reply without help.
+- [ ] Customer Chat page (simulated demo): select shop, type message in En/Hi/Mr/Hinglish, immediate draft generation, pending status in `reply_log`, memory session tracking in `st.session_state`, "Simulated chat for demo" label.
+- [ ] Owner Inbox page: pending drafts queue (`seller_action IS NULL`), customer message, editable draft, needs-check & risk warnings, action buttons (Send as is, Send edited, Discard), refresh button & `st.fragment(run_every=...)`.
+- [ ] Shop selector (switches active shop without login; replies never cross shop boundaries).
+- [ ] Friendly error if Ollama is not running or model is missing.
+- [ ] Side-by-side demo verification (two localhost windows: owner left, customer right).
+- [ ] Done when: a non-technical person could set up a shop, receive simulated messages in their inbox, and review/send replies without help.
 
 ## M3 — Evaluation (16 Oct)
 
@@ -56,11 +60,19 @@ Rule: work one milestone at a time. Tick boxes as you finish. Add a dated line t
 ## M4 — Write-up and submit (17 to 18 Oct)
 
 - [ ] Optional: demo hosting. If using a `.tech` domain, claim it at hacktoberfest.com/my/promos.
-- [ ] Record a 2 to 3 minute demo video: setup a shop, paste a Hindi/Marathi/Hinglish message, show the needs-check case, show it working offline.
+- [ ] Record a 2 to 3 minute demo video using two browser windows side by side (owner left, customer right).
 - [ ] README: what it is, install steps, how to run the eval, honest limitations, note any commits after the deadline.
 - [ ] Write the DEV post from `docs/BUILD_LOG.md`. Use the template sections. Lead with who the seller is and what their problem was; show real numbers and real failures; explain why open models mattered.
 - [ ] Choose prize categories honestly (Gemma yes; others only if really used).
 - [ ] Submit with time to spare (evening 18 Oct IST).
+
+### Demo script (2 to 3 minute screen recording, side-by-side windows: Owner left, Customer right)
+- a. In the owner window, set up or open a shop on the Setup page (show products, prices, policies).
+- b. In the customer window, send a normal question (for example a price or delivery question). Show the draft appearing in the owner inbox, edit it, send it, and show it arriving in the customer chat.
+- c. Send a question the shop data does not cover (for example custom work or a gluten allergy). Show the needs-check banner and the "I'll check" reply.
+- d. Switch to a second shop and send a Hindi, Marathi or Hinglish message to show it works for any seller and matches the customer's language.
+- e. Turn Wi-Fi off and send one more message to show it runs locally.
+- Note: Record the model tag and the latency shown during the demo in `docs/BUILD_LOG.md` (real measurements only).
 
 ## Stretch (only if everything above is done)
 

@@ -13,6 +13,8 @@ replydesk/
 ├── app.py                     # Streamlit entry point (navigation + shared sidebar)
 ├── ui/
 │   ├── reply_page.py          # paste message, draft, flags, copy, mark action
+│   ├── inbox_page.py          # owner inbox: pending drafts queue, review/send/discard
+│   ├── customer_chat_page.py  # simulated customer chat for side-by-side demo
 │   ├── setup_page.py          # shop details, products, policies, samples, import/export
 │   ├── history_page.py        # past drafts
 │   └── settings_page.py       # model name, Ollama status, clear history
@@ -161,11 +163,13 @@ Loads `eval/questions.json`, imports sample shops into a temporary database (so 
 
 ## UI pages (Streamlit)
 
-- Sidebar: shop selector, model name, Ollama status indicator.
-- Reply page: text area for customer message, Draft button (spinner), draft in an editable text area, copy button, flags (needs-check, ungrounded amounts, risk topics), buttons "Sent as is", "Edited", "Discard".
-- Setup page: tabs for Shop, Products, Policies, Sample replies, Import/Export.
-- History page: table of past drafts with filters.
-- Settings page: model tag (with list of installed models from Ollama), clear history.
+- Sidebar: shop selector (switches active seller without login), model name, Ollama status indicator.
+- Customer Chat page (`ui/customer_chat_page.py`): Simulated customer chat for side-by-side demo. Shop selector, message input in any supported language/script. Submitting calls `service.draft_reply` and saves with pending status (`seller_action IS NULL`). Messages stored in `st.session_state`. Shows "The shop will reply shortly" until sent. Never exposes drafts or internal flags.
+- Owner Inbox page (`ui/inbox_page.py`): Message triage queue for shop owners. Lists pending drafts (`seller_action IS NULL`) for active shop, newest first. Displays customer message, editable draft, needs-check banner with reason, and warnings. Quick action buttons: "Send as is", "Send edited", "Discard". Optional polling/refresh via `st.fragment(run_every=...)`.
+- Reply page (`ui/reply_page.py`): Manual scratchpad to paste message, click Draft, view flags, copy, or mark action.
+- Setup page (`ui/setup_page.py`): Tabs for Shop, Products, Policies, Sample replies, Import/Export.
+- History page (`ui/history_page.py`): Table of past drafts with status filters.
+- Settings page (`ui/settings_page.py`): Model tag (with list of installed models from Ollama), clear history.
 
 Keep page functions thin; all logic lives in `engine/`.
 
@@ -176,6 +180,7 @@ Keep page functions thin; all logic lives in `engine/`.
 ## Data flow summary
 
 1. Import or enter shop data -> SQLite.
-2. Draft request -> `service.draft_reply` -> `retrieval.build_context` -> `prompt.build_messages` -> `llm.generate_json` -> `guardrails` -> `db.log_reply`.
-3. Seller action -> `db.set_reply_action`.
-4. Export shop -> `importer.export_config`.
+2. Manual Draft request -> `service.draft_reply` -> `retrieval.build_context` -> `prompt.build_messages` -> `llm.generate_json` -> `guardrails` -> `db.log_reply` (pending or logged).
+3. Simulated Chat flow: Customer sends message -> `service.draft_reply` -> logged in `reply_log` with `seller_action = NULL` -> customer sees "The shop will reply shortly." -> Owner Inbox loads pending drafts -> Owner edits/approves ("Send") -> `db.set_reply_action` -> Customer Chat displays `final_reply` (or `drafted_reply`).
+4. Seller action -> `db.set_reply_action`.
+5. Export shop -> `importer.export_config`.
