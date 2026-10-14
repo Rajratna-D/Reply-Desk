@@ -30,7 +30,7 @@ replydesk/
 │   └── service.py             # draft_reply orchestration
 ├── db/
 │   ├── schema.sql
-│   └── fts.sql                # optional FTS5 setup (stretch)
+│   └── fts.sql                # SQLite FTS5 setup and sync triggers
 ├── config/
 │   ├── seller.schema.json
 │   ├── urban_thread.json
@@ -102,7 +102,8 @@ class Context:
 
 def build_context(conn, seller_id: int, message: str | None = None, *, max_products: int = 40) -> Context: ...
 ```
-v1: include every product (up to `max_products`). Stretch: when over the limit, use FTS5 on `message` to pick top-k.
+
+Hybrid retrieval: small catalogues (<= 15 products) include the complete catalogue for 100% recall; larger catalogues use SQLite FTS5 BM25 search on customer query to retrieve top-k matching products. Known amounts always preload all catalogue variant prices to preserve guardrail precision.
 
 ### `engine/prompt.py`
 

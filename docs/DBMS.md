@@ -220,9 +220,9 @@ FROM reply_log
 WHERE id = ?;
 ```
 
-## 9. Optional full-text search (stretch)
+## 9. SQLite FTS5 Full-Text Search
 
-If a catalogue grows past the prompt budget, add an FTS5 index over `products(name, description)` in `db/fts.sql` with triggers to keep it in sync, and retrieve the top-k products for a message. FTS5 must be available in the installed SQLite build; check with `PRAGMA compile_options;`. Not part of the core schema so the core never fails on a build without FTS5.
+Implemented in `db/fts.sql` and `engine/db.py`. Creates an FTS5 virtual table `products_fts` indexing `name, category, description, notes` using the external content table pattern (`content='products', content_rowid='id'`). Real-time triggers (`trg_products_fts_ai`, `trg_products_fts_ad`, `trg_products_fts_au`) keep the search index synchronized whenever products are inserted, updated, or deleted. `engine.db.search_products_fts` provides BM25 ranked retrieval with Unicode query sanitization supporting Latin and Devanagari scripts.
 
 ## 10. Migrations
 
