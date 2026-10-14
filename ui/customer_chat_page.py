@@ -1,19 +1,44 @@
 """Customer chat simulator designed like a modern messenger (WhatsApp/Instagram style)."""
 
 import streamlit as st
-from engine.db import connect, get_reply_by_id, get_seller_by_slug
+from engine.db import connect, get_seller_by_slug, list_history
 from engine.service import draft_reply
+
+
+def send_customer_message(active_slug: str, message_text: str):
+    """Deliver a customer message to SQLite and draft reply with local Gemma."""
+    clean_msg = message_text.strip()
+    if not clean_msg:
+        return
+    with st.spinner("Delivering message to shop inbox..."):
+        try:
+            draft_reply(
+                seller_slug=active_slug,
+                message=clean_msg,
+                seller_action=None,  # Pending owner review
+            )
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error drafting reply: {e}")
 
 
 def render_customer_chat_page(active_slug: str):
     conn = connect()
     try:
         seller = get_seller_by_slug(conn, active_slug)
+        if not seller:
+            st.error(f"Shop '{active_slug}' not found.")
+            return
+
+        seller_id = seller["id"]
+        # Fetch conversation stream from SQLite (last 20 messages, chronological order)
+        raw_history = list_history(conn, seller_id, action_filter="all")
+        chat_messages = list(reversed(raw_history[:20]))
     finally:
         conn.close()
 
-    shop_name = seller["shop_name"] if seller else "Shop"
-    shop_desc = seller["description"] if seller else "Local seller"
+    shop_name = seller["shop_name"]
+    shop_desc = seller["description"] or "Local seller"
 
     # Split-screen demo hint banner
     st.markdown(
@@ -28,141 +53,113 @@ def render_customer_chat_page(active_slug: str):
 
     col_chat, col_info = st.columns([7, 4], gap="medium")
 
-    # Session state for message tracking
-    if "customer_reply_ids" not in st.session_state:
-        st.session_state["customer_reply_ids"] = []
-
     # ----------------- LEFT COLUMN: The Messenger Viewport -----------------
     with col_chat:
         # Simulated Mobile Messenger Header
-        st.markdown(
-            f"""
-            <div class="chat-device-header" style="border-radius: 12px 12px 0 0;">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #059669 0%, #10b981 100%); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.05rem; color: #ffffff; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);">
-                        {shop_name[0]}
-                    </div>
-                    <div>
-                        <div style="font-weight: 600; font-size: 0.96rem; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
-                            {shop_name} <span style="color: #38bdf8; font-size: 0.85rem;" title="Verified Business">✓</span>
+        c_head_left, c_head_right = st.columns([4, 1.2])
+        with c_head_left:
+            st.markdown(
+                f"""
+                <div class="chat-device-header" style="border-radius: 12px 12px 0 0; padding: 10px 14px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, #059669 0%, #10b981 100%); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.05rem; color: #ffffff; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);">
+                            {shop_name[0]}
                         </div>
-                        <div style="font-size: 0.74rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
-                            <span class="pulse-dot"></span> Active now on WhatsApp
+                        <div>
+                            <div style="font-weight: 600; font-size: 0.95rem; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
+                                {shop_name} <span style="color: #38bdf8; font-size: 0.85rem;" title="Verified Business">✓</span>
+                            </div>
+                            <div style="font-size: 0.74rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
+                                <span class="pulse-dot"></span> Active now on WhatsApp
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div>
-                    <span style="font-size: 0.72rem; background: rgba(255, 255, 255, 0.06); padding: 4px 10px; border-radius: 12px; color: #94a3b8;">
-                        Buyer View
-                    </span>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+                """,
+                unsafe_allow_html=True,
+            )
+        with c_head_right:
+            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+            if st.button("🔄 Refresh", help="Check for replies sent by the shop owner", use_container_width=True):
+                st.rerun()
 
         # Native scrolling container for chat messages
-        with st.container(height=380, border=True):
-            conn = connect()
-            try:
-                message_ids = st.session_state["customer_reply_ids"]
-                if not message_ids:
-                    # Welcome State
+        with st.container(height=400, border=True):
+            if not chat_messages:
+                # Welcome State
+                st.markdown(
+                    f"""
+                    <div style="text-align: center; padding: 45px 20px; color: #64748b;">
+                        <div style="font-size: 2.2rem; margin-bottom: 8px;">🛍️</div>
+                        <div style="font-size: 1.05rem; font-weight: 600; color: #e2e8f0; margin-bottom: 4px;">Direct WhatsApp Inquiry with {shop_name}</div>
+                        <div style="font-size: 0.82rem; max-width: 360px; margin: 0 auto; line-height: 1.4;">
+                            Ask about pricing, stock availability, sizes, delivery time, or custom orders in English, Hindi, Marathi, or Hinglish.
+                        </div>
+                        <div style="font-size: 0.76rem; color: #94a3b8; margin-top: 14px;">
+                            💡 Click any prompt button on the right to send an inquiry instantly!
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                for row in chat_messages:
+                    # Customer message bubble (Right aligned, WhatsApp green)
+                    time_str = row["created_at"].split(" ")[-1][:5] if " " in row["created_at"] else ""
                     st.markdown(
                         f"""
-                        <div style="text-align: center; padding: 45px 20px; color: #64748b;">
-                            <div style="font-size: 2.4rem; margin-bottom: 8px;">🛍️</div>
-                            <div style="font-size: 1.05rem; font-weight: 600; color: #e2e8f0; margin-bottom: 4px;">Direct WhatsApp Inquiry with {shop_name}</div>
-                            <div style="font-size: 0.82rem; max-width: 360px; margin: 0 auto; line-height: 1.4;">
-                                Ask about pricing, stock availability, sizes, delivery time, or custom orders in English, Hindi, Marathi, or Hinglish.
+                        <div class="chat-bubble-customer">
+                            <div>{row["customer_message"]}</div>
+                            <div style="font-size: 0.68rem; opacity: 0.75; text-align: right; margin-top: 3px;">
+                                {time_str} <span style="color: #6ee7b7;">✓✓</span>
                             </div>
                         </div>
                         """,
                         unsafe_allow_html=True,
                     )
-                else:
-                    for mid in message_ids:
-                        row = get_reply_by_id(conn, mid)
-                        if not row:
-                            continue
 
-                        # Customer message bubble (Right aligned, WhatsApp green)
-                        time_str = row["created_at"].split(" ")[-1][:5] if " " in row["created_at"] else ""
+                    # Shop reply status bubble (Left aligned)
+                    action = row["seller_action"]
+                    if action in ("sent_as_is", "edited"):
+                        reply_body = row["final_reply"] if row["final_reply"] else row["drafted_reply"]
                         st.markdown(
                             f"""
-                            <div class="chat-bubble-customer">
-                                <div>{row["customer_message"]}</div>
-                                <div style="font-size: 0.68rem; opacity: 0.75; text-align: right; margin-top: 3px;">
-                                    {time_str} <span style="color: #6ee7b7;">✓✓</span>
-                                </div>
+                            <div class="chat-bubble-shop">
+                                <div style="font-size: 0.72rem; color: #34d399; font-weight: 600; margin-bottom: 3px;">{shop_name}</div>
+                                <div>{reply_body}</div>
+                                <div style="font-size: 0.68rem; opacity: 0.55; text-align: right; margin-top: 3px;">Delivered</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                    elif action == "discarded":
+                        pass
+                    else:
+                        # Pending owner approval in inbox
+                        st.markdown(
+                            """
+                            <div class="chat-bubble-pending">
+                                <span class="pulse-dot" style="background-color: #f59e0b;"></span>
+                                <span>The shop owner is reviewing the drafted reply in their inbox...</span>
                             </div>
                             """,
                             unsafe_allow_html=True,
                         )
 
-                        # Shop reply status bubble (Left aligned)
-                        action = row["seller_action"]
-                        if action in ("sent_as_is", "edited"):
-                            reply_body = row["final_reply"] if row["final_reply"] else row["drafted_reply"]
-                            st.markdown(
-                                f"""
-                                <div class="chat-bubble-shop">
-                                    <div style="font-size: 0.72rem; color: #34d399; font-weight: 600; margin-bottom: 3px;">{shop_name}</div>
-                                    <div>{reply_body}</div>
-                                    <div style="font-size: 0.68rem; opacity: 0.55; text-align: right; margin-top: 3px;">Delivered</div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
-                            )
-                        elif action == "discarded":
-                            pass
-                        else:
-                            # Pending owner approval in inbox
-                            st.markdown(
-                                """
-                                <div class="chat-bubble-pending">
-                                    <span class="pulse-dot" style="background-color: #f59e0b;"></span>
-                                    <span>The shop owner is reviewing the drafted reply in their inbox...</span>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
-                            )
-            finally:
-                conn.close()
+        # Chat Input Form (supports Enter to send, and clears on submit)
+        with st.form("customer_chat_form", clear_on_submit=True):
+            col_in, col_btn = st.columns([5.8, 1.4])
+            with col_in:
+                user_msg = st.text_input(
+                    "Message",
+                    placeholder="Type a question and press Enter or Send...",
+                    label_visibility="collapsed",
+                )
+            with col_btn:
+                send_pressed = st.form_submit_button("Send ➤", type="primary", use_container_width=True)
 
-        # Chat Input bar
-        suggested_val = st.session_state.pop("suggested_prompt", "")
-        col_input, col_send, col_ref = st.columns([5.5, 1.4, 1.1])
-
-        with col_input:
-            user_msg = st.text_input(
-                "Message",
-                value=suggested_val,
-                placeholder="Type your message in English, Hindi, Marathi, or Hinglish...",
-                label_visibility="collapsed",
-                key="customer_chat_input",
-            )
-
-        with col_send:
-            send_pressed = st.button("Send ➤", type="primary", use_container_width=True)
-
-        with col_ref:
-            if st.button("🔄", help="Refresh chat for new owner replies", use_container_width=True):
-                st.rerun()
-
-        if send_pressed and user_msg.strip():
-            with st.spinner("Delivering message to shop inbox..."):
-                try:
-                    draft = draft_reply(
-                        seller_slug=active_slug,
-                        message=user_msg.strip(),
-                        seller_action=None,  # Pending owner review
-                    )
-                    if draft.reply_id:
-                        st.session_state["customer_reply_ids"].append(draft.reply_id)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
+            if send_pressed and user_msg.strip():
+                send_customer_message(active_slug, user_msg.strip())
 
     # ----------------- RIGHT COLUMN: Simulator Controls & Quick Prompts -----------------
     with col_info:
@@ -182,38 +179,34 @@ def render_customer_chat_page(active_slug: str):
             st.markdown(
                 """
                 <div style="font-size: 0.74rem; font-weight: 600; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">
-                    Test Personas & Prompts
+                    Test Personas & Prompts (Instant Send)
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-            if st.button("🏷️ Normal Price Inquiry", use_container_width=True, help="Asks price of a catalogue item"):
-                st.session_state["suggested_prompt"] = "Hi, what is the price and is it currently in stock?"
-                st.rerun()
+            if st.button("🏷️ Normal Price Inquiry", use_container_width=True, help="Sends a catalogue price inquiry"):
+                send_customer_message(active_slug, "Hi, what is the price of the oxidised jhumka and is it currently in stock?")
 
-            if st.button("🚚 Shipping & Delivery Question", use_container_width=True, help="Tests delivery policy grounding"):
-                st.session_state["suggested_prompt"] = "How many days does delivery take and what are the charges?"
-                st.rerun()
+            if st.button("🚚 Shipping & Delivery Question", use_container_width=True, help="Sends a shipping policy inquiry"):
+                send_customer_message(active_slug, "How many days does standard delivery take and what are the shipping charges?")
 
-            if st.button("⚠️ Out-of-Catalogue Inquiry", use_container_width=True, help="Triggers needs-check guardrail banner"):
-                st.session_state["suggested_prompt"] = "Can you make a customized 3-tier gold plated cake with gluten-free almond base?"
-                st.rerun()
+            if st.button("⚠️ Out-of-Catalogue Inquiry", use_container_width=True, help="Sends an out-of-scope question to test needs_check"):
+                send_customer_message(active_slug, "Can you make a customized 3-tier gold plated cake with gluten-free almond base?")
 
-            if st.button("🌐 Hindi / Hinglish Message", use_container_width=True, help="Tests language detection and tone matching"):
-                st.session_state["suggested_prompt"] = "Bhaiya ye product Mumbai deliver ho sakta hai kya aur kitna time lagega?"
-                st.rerun()
+            if st.button("🌐 Hindi / Hinglish Message", use_container_width=True, help="Sends a message in Hinglish"):
+                send_customer_message(active_slug, "Bhaiya ye product Mumbai deliver ho sakta hai kya aur kitna time lagega?")
 
             st.divider()
 
             st.markdown(
                 """
-                <div style="font-size: 0.75rem; color: #94a3b8; line-height: 1.4;">
+                <div style="font-size: 0.75rem; color: #94a3b8; line-height: 1.45;">
                     <strong>Demo Workflow:</strong><br/>
-                    1. Send an inquiry here.<br/>
-                    2. In the Owner window, click <strong>📥 Owner Inbox</strong>.<br/>
-                    3. Approve or edit the draft.<br/>
-                    4. See the reply delivered here!
+                    1. Click any test button above to send an inquiry.<br/>
+                    2. In the Owner window, open <strong>📥 Owner Inbox</strong>.<br/>
+                    3. Review safety flags, edit or approve the draft.<br/>
+                    4. Click <strong>🔄 Refresh</strong> here to see the response delivered!
                 </div>
                 """,
                 unsafe_allow_html=True,
