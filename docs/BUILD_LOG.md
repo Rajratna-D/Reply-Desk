@@ -34,6 +34,7 @@ Format: `YYYY-MM-DD HH:MM IST - [type] note` where type is one of `decision`, `b
 - 2026-10-14 21:47 IST - [measurement] Devanagari prompt tuning on 21 dev cases on gemma:7b. Run 1: 61.9% (13/21), facts 16/21, check 18/21, median latency 10448 ms. Run 2: 61.9% (13/21), facts 17/21, check 18/21, median latency 9382 ms.
 - 2026-10-14 22:12 IST - [measurement] Complete 34-case final benchmark on gemma2:2b (dev: 21 cases, test: 13 cases). Overall pass rate 85.3% (29/34), facts_ok 32/34 (94.1%), needs_check_ok 30/34 (88.2%), median latency 3440 ms. English 11/13 (84.6%), Hindi 7/8 (87.5%), Marathi 6/7 (85.7%), Hinglish 5/6 (83.3%). Test split pass rate reached 76.9% (10/13) vs 53.8% before tuning.
 - 2026-10-14 22:14 IST - [measurement] Completed manual tone scoring review across 10 sample replies for gemma2:2b across English, Hindi, Marathi, and Hinglish. Average tone score: 4.9/5.0. Natural phrasing, adherence to shop persona guidelines, and correct Devanagari script usage verified.
+- 2026-10-14 23:40 IST - [measurement] Physical offline test verified with Wi-Fi off. Confirmed draft_reply and simulated customer chat generate full responses on localhost:8501 without internet connection. Zero external network calls confirmed.
 
 
 

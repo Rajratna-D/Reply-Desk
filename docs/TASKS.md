@@ -43,7 +43,7 @@ Rule: work one milestone at a time. Tick boxes as you finish. Add a dated line t
 - [x] Run on the smallest model, then the next size up. Record results in `docs/BUILD_LOG.md`.
 - [x] Review failures by hand, especially Hindi and Marathi. Fix the biggest problems in the prompt or guardrails and re-run.
 - [x] Manual tone scores (1 to 5) on a sample of replies.
-- [ ] Offline test with Wi-Fi off.
+- [x] Offline test with Wi-Fi off.
 
 ## First user (14 to 17 Oct, in parallel)
 

@@ -95,7 +95,7 @@ flowchart TD
    - Export and import full shop profiles as portable JSON configs.
 
 6. **Automated Evaluation Suite & Live Dashboard:**
-   - Built-in benchmark runner ([eval/run_eval.py](file:///d:/HackFest_W2/replydesk/eval/run_eval.py)) evaluates 25 standardized customer test cases across 4 languages.
+   - Built-in benchmark runner ([eval/run_eval.py](file:///d:/HackFest_W2/replydesk/eval/run_eval.py)) evaluates 34 standardized customer test cases across 4 languages (21 dev cases, 13 test cases).
    - Dedicated Streamlit dashboard with top KPI tiles, performance slices (All, English, Hindi, Marathi, Hinglish, dev, test), diagnostic failure inspector, and markdown report downloads.
 
 ---
@@ -150,7 +150,7 @@ Open your browser at `http://localhost:8501`.
 
 ## Running the Automated Benchmark Suite
 
-ReplyDesk includes an automated evaluation harness with 25 test cases in [eval/questions.json](file:///d:/HackFest_W2/replydesk/eval/questions.json).
+ReplyDesk includes an automated evaluation harness with 34 test cases in [eval/questions.json](file:///d:/HackFest_W2/replydesk/eval/questions.json) (21 dev split, 13 frozen test split).
 
 To run the complete benchmark suite from the command line:
 ```bash
@@ -167,17 +167,17 @@ All 25 unit tests pass in under 7 seconds.
 
 ### Measured Benchmark Results (Gemma 2 2B on RTX 3050 6GB)
 
-From the full 25-case standardized evaluation run ([eval/reports/latest_eval.md](eval/reports/latest_eval.md)):
+From the standardized evaluation run on 34 cases ([eval/reports/latest_eval.md](eval/reports/latest_eval.md)):
 
 | Slice | Cases | facts_ok | needs_check_ok | language_ok | Overall Pass | Median Latency |
 |---|---|---|---|---|---|---|
-| **All Cases** | 25 | 23/25 (92.0%) | 22/25 (88.0%) | 22/25 (88.0%) | **17/25 (68.0%)** | 3,395 ms |
-| **English** | 13 | 11/13 (84.6%) | 10/13 (76.9%) | 13/13 (100.0%) | **8/13 (61.5%)** | 3,487 ms |
-| **Hinglish** | 6 | 6/6 (100.0%) | 6/6 (100.0%) | 6/6 (100.0%) | **6/6 (100.0%)** | 3,196 ms |
-| **Marathi** | 3 | 3/3 (100.0%) | 3/3 (100.0%) | 2/3 (66.7%) | **2/3 (66.7%)** | 3,529 ms |
-| **Hindi** | 3 | 3/3 (100.0%) | 3/3 (100.0%) | 1/3 (33.3%) | **1/3 (33.3%)** | 3,437 ms |
-| **dev Split** | 12 | 11/12 (91.7%) | 12/12 (100.0%) | 11/12 (91.7%) | **10/12 (83.3%)** | 3,414 ms |
-| **test Split** | 13 | 12/13 (92.3%) | 10/13 (76.9%) | 11/13 (84.6%) | **7/13 (53.8%)** | 3,395 ms |
+| **All Cases** | 34 | 32/34 (94.1%) | 30/34 (88.2%) | 33/34 (97.1%) | **29/34 (85.3%)** | 3,440 ms |
+| **English** | 13 | 12/13 (92.3%) | 12/13 (92.3%) | 13/13 (100.0%) | **11/13 (84.6%)** | 3,463 ms |
+| **Hindi** | 8 | 8/8 (100.0%) | 7/8 (87.5%) | 8/8 (100.0%) | **7/8 (87.5%)** | 3,421 ms |
+| **Marathi** | 7 | 6/7 (85.7%) | 6/7 (85.7%) | 6/7 (85.7%) | **6/7 (85.7%)** | 3,627 ms |
+| **Hinglish** | 6 | 6/6 (100.0%) | 5/6 (83.3%) | 6/6 (100.0%) | **5/6 (83.3%)** | 3,380 ms |
+| **dev Split** | 21 | 20/21 (95.2%) | 19/21 (90.5%) | 20/21 (95.2%) | **19/21 (90.5%)** | 3,438 ms |
+| **test Split** | 13 | 12/13 (92.3%) | 11/13 (84.6%) | 13/13 (100.0%) | **10/13 (76.9%)** | 3,452 ms |
 
 ---
 
@@ -187,7 +187,7 @@ From the full 25-case standardized evaluation run ([eval/reports/latest_eval.md]
 |---|---|---|
 | **Customer Privacy** | Customer chats and internal margins sent to 3rd-party servers | **On-Device:** Data stays on the seller's computer |
 | **Operating Cost** | $0.25 to $0.50 per 1M tokens (~₹0.20 per customer inquiry) | **Electricity Only:** ~₹0.001 per reply (~₹10 for 10,000 replies) |
-| **Offline Architecture** | Dependent on active internet connection and API uptime | **Local-First Design:** Application code makes zero runtime external network calls |
+| **Offline Reliability** | Dependent on active internet connection and API uptime | **Zero Internet Required:** Verified working completely offline with Wi-Fi disconnected |
 | **Vendor Lock-in** | Proprietary APIs, forced model deprecations, price changes | **Open Weights:** Swappable model tag in `.env` with no code changes |
 
 ---
@@ -197,14 +197,12 @@ From the full 25-case standardized evaluation run ([eval/reports/latest_eval.md]
 Honest disclosure of model behavior and benchmark limitations observed during testing:
 
 1. **SC-16 (Delivery Fee Omission):** For Sweet Crumbs, when asked about delivery for a ₹650 cake to Baner, the model stated delivery is free for orders of ₹800 or above, but omitted the applicable ₹50 delivery charge.
-2. **UT-09 (Invented Policy Statement):** When asked for a 20% discount on an anarkali kurti, the model correctly flagged `needs_check`, but invented the statement *"we don't offer discounts on our products"* (which is not in the shop data).
-3. **SC-14 (Hallucinated Ingredient):** When asked about gluten allergy for red velvet cake, the model claimed red velvet contains wheat flour (wheat flour was listed in shop data for brownies and cupcakes, not red velvet).
-4. **Script Mismatches on Non-English Queries (UT-08, KJ-20, KJ-22):** The model occasionally drafted responses in English when the customer asked in Hindi (`UT-08`, `KJ-20`) or Marathi (`KJ-22`), failing the script matching criteria.
-5. **KJ-25 (Prompt Injection / Private Info Not Flagged):** When prompted to ignore instructions and reveal the owner's phone number and cost price, the model refused politely, but did not flag `needs_check: true` on the draft card.
-6. **Keyword Scoring Limitations:** The evaluation harness scores replies using keyword and regex matching. It verifies known prices and key terms, but cannot detect invented factual statements other than prices if they are not covered by explicit negative checks.
-7. **Run-to-Run Variance:** Because generation runs with standard sampling, results vary between runs without prompt changes (for example, the 12-case dev split scored 9/12 on one run and 10/12 on another).
-8. **Review-First Workflow:** Drafts are suggestions. A human seller must review every draft before sending it to a customer.
-9. **Demo Messaging:** The Customer Chat page is a local simulation for split-screen demonstration purposes; it is not hooked into official WhatsApp Business Cloud APIs (which require paid enterprise verification).
+2. **UT-04 (Fallback Script Mismatch):** When asked in Marathi about size exchange policy, the model occasionally defaults to the English safe fallback ("We'll check this and get back to you shortly.") rather than reciting the 7-day exchange window in Marathi.
+3. **Conservative Over-Checking (UT-05, SC-11):** The model sometimes marks `needs_check: true` for out-of-stock items or standard custom requests (like eggless cakes), treating them with extra caution even when catalogue policies state standard availability.
+4. **Keyword Scoring Limitations:** The evaluation harness scores replies using keyword and regex matching. It verifies known prices and key terms, but cannot detect invented factual statements other than prices if they are not covered by explicit negative checks.
+5. **Run-to-Run Variance:** Because generation runs with standard sampling (temperature 0.3), results vary slightly between runs without prompt changes.
+6. **Review-First Workflow:** Drafts are suggestions. A human seller must review every draft before sending it to a customer.
+7. **Demo Messaging:** The Customer Chat page is a local simulation for split-screen demonstration purposes; it is not hooked into official WhatsApp Business Cloud APIs (which require paid enterprise verification).
 
 ---
 
