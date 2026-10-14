@@ -6,24 +6,24 @@ Rule: work one milestone at a time. Tick boxes as you finish. Add a dated line t
 
 ## M0 — Setup (14 Oct)
 
-- [ ] Create the git repo. First commit must be on or after 12 Oct (challenge window).
-- [ ] Add `.gitignore`, `requirements.txt` (`streamlit`, `ollama`, `jsonschema`, `pytest`, `python-dotenv`).
-- [ ] Install Ollama, pull the smallest Gemma 4 tag, confirm it answers from the command line.
-- [ ] Record hardware, tag names, and `ollama ps` output in `docs/SETUP.md` and `docs/BUILD_LOG.md`.
+- [x] Create the git repo. First commit must be on or after 12 Oct (challenge window).
+- [x] Add `.gitignore`, `requirements.txt` (`streamlit`, `ollama`, `jsonschema`, `pytest`, `python-dotenv`).
+- [x] Install Ollama, pull the smallest model tag, confirm it answers from the command line.
+- [x] Record hardware, tag names, and `ollama ps` output in `docs/SETUP.md` and `docs/BUILD_LOG.md`.
 - [ ] Send messages to 10 to 15 possible sellers (see "First user" below).
 
 ## M1 — Engine core (14 to 15 Oct)
 
-- [ ] `engine/config.py`: settings from environment.
-- [ ] `engine/db.py`: `init` creates the database from `db/schema.sql`; connection helper with `PRAGMA foreign_keys = ON`.
-- [ ] `engine/importer.py`: import and export seller JSON (validate against `config/seller.schema.json`).
-- [ ] `engine/retrieval.py`: build catalogue and policy context for a seller.
-- [ ] `engine/prompt.py`: build the system prompt and few-shot examples from `docs/PROMPTS.md`.
-- [ ] `engine/llm.py`: call Ollama with structured output; clear errors if Ollama is down or the model is missing.
-- [ ] `engine/guardrails.py`: numeric grounding check and `needs_check` enforcement.
-- [ ] `engine/service.py`: `draft_reply(seller_slug, message)` returns reply, language, needs_check, reason, latency.
-- [ ] Tests for importer, retrieval, and guardrails (no model needed). A smoke test that calls the model, skipped if Ollama is not running.
-- [ ] Done when: running `draft_reply` from a script on the three sample shops gives sensible replies.
+- [x] `engine/config.py`: settings from environment.
+- [x] `engine/db.py`: `init` creates the database from `db/schema.sql`; connection helper with `PRAGMA foreign_keys = ON`.
+- [x] `engine/importer.py`: import and export seller JSON (validate against `config/seller.schema.json`).
+- [x] `engine/retrieval.py`: build catalogue and policy context for a seller.
+- [x] `engine/prompt.py`: build the system prompt and few-shot examples from `docs/PROMPTS.md`.
+- [x] `engine/llm.py`: call Ollama with structured output; clear errors if Ollama is down or the model is missing.
+- [x] `engine/guardrails.py`: numeric grounding check and `needs_check` enforcement.
+- [x] `engine/service.py`: `draft_reply(seller_slug, message)` returns reply, language, needs_check, reason, latency.
+- [x] Tests for importer, retrieval, and guardrails (no model needed). A smoke test that calls the model, skipped if Ollama is not running.
+- [x] Done when: running `draft_reply` from a script on the three sample shops gives sensible replies.
 
 ## M2 — UI (15 to 16 Oct)
 
