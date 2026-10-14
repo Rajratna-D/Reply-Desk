@@ -98,6 +98,11 @@ def draft_reply(
             grounding_note = f"Contains ungrounded price(s) not in seller data: {un_str}."
             reason = f"{grounding_note} {reason}".strip()
 
+        if "private_and_sensitive" in r_topics:
+            needs_check = True
+            security_note = "Private, sensitive, or prompt injection inquiry detected."
+            reason = f"{security_note} {reason}".strip()
+
         reply_id = None
         if log:
             reply_id = log_reply(

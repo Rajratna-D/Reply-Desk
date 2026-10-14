@@ -98,9 +98,27 @@ Reply with JSON only, matching this schema:
 {{"reply": string, "language": "en"|"hi"|"mr"|"hinglish", "needs_check": boolean, "reason": string}}"""
 
 
+def has_devanagari(text: str) -> bool:
+    """Check if text contains any Devanagari script characters."""
+    return any(0x0900 <= ord(c) <= 0x097F for c in text)
+
+
 def build_messages(ctx: Context, customer_message: str) -> list[dict[str, str]]:
-    """Build the messages payload for chat completion."""
+    """Build the messages payload for chat completion.
+
+    Detects Devanagari script in customer inquiry and appends an explicit
+    instruction to write the response in Devanagari Hindi or Marathi, not English.
+    """
+    user_content = customer_message
+    if has_devanagari(customer_message):
+        user_content = (
+            f"{customer_message}\n\n"
+            "[CRITICAL INSTRUCTION: The customer wrote in Devanagari script. "
+            "You MUST write your reply in Devanagari script (Hindi or Marathi). "
+            "Do NOT reply in English or Latin script.]"
+        )
+
     return [
         {"role": "system", "content": build_system_prompt(ctx)},
-        {"role": "user", "content": customer_message},
+        {"role": "user", "content": user_content},
     ]

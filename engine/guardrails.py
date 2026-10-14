@@ -40,6 +40,7 @@ RISK_TOPIC_KEYWORDS: dict[str, list[str]] = {
     "private_and_sensitive": [
         "phone number", "mobile number", "contact number", "cost price", "margin",
         "personal number", "address", "call me", "ignore instructions",
+        "ignore your instructions", "ignore previous instructions",
         "system prompt", "developer instructions",
     ],
 }
@@ -67,7 +68,7 @@ RISK_TOPIC_PATTERNS: dict[str, re.Pattern[str]] = {
         re.IGNORECASE,
     ),
     "private_and_sensitive": re.compile(
-        r"\b(?:phone\s+number|mobile\s+number|contact\s+number|cost\s+price|margin|personal\s+number|address|call\s+me|ignore\s+(?:previous\s+)?instructions|system\s+prompt|developer\s+instructions)\b",
+        r"\b(?:phone\s+number|mobile\s+number|contact\s+number|cost\s+price|margin|personal\s+number|address|call\s+me|ignore\s+(?:all\s+|previous\s+|your\s+)?instructions|system\s+prompt|developer\s+instructions)\b",
         re.IGNORECASE,
     ),
 }
