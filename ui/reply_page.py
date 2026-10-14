@@ -143,12 +143,13 @@ def render_reply_page(active_slug: str):
                         unsafe_allow_html=True,
                     )
 
-                # Editable Text Area
+                # Editable Text Area with dynamic key per draft
+                edit_key = f"manual_edit_{draft.reply_id}" if draft.reply_id else f"manual_edit_{abs(hash(draft.reply))}"
                 edited_draft = st.text_area(
                     "Final Reply",
                     value=draft.reply,
                     height=110,
-                    key="manual_edit_area",
+                    key=edit_key,
                     label_visibility="collapsed",
                 )
 
@@ -162,19 +163,23 @@ def render_reply_page(active_slug: str):
                 conn = connect()
                 try:
                     with col_a1:
-                        if st.button("✓ Sent As Is", key="manual_btn_as_is", type="primary", use_container_width=True):
+                        if st.button("✓ Sent As Is", key=f"manual_btn_as_is_{draft.reply_id}", type="primary", use_container_width=True):
                             if draft.reply_id:
                                 set_reply_action(conn, draft.reply_id, "sent_as_is", final_reply=draft.reply)
                             st.success("Logged as sent!")
 
                     with col_a2:
-                        if st.button("✏️ Sent Edited", key="manual_btn_edited", use_container_width=True):
-                            if draft.reply_id:
-                                set_reply_action(conn, draft.reply_id, "edited", final_reply=edited_draft.strip())
-                            st.success("Logged edited draft!")
+                        if st.button("✏️ Sent Edited", key=f"manual_btn_edited_{draft.reply_id}", use_container_width=True):
+                            clean_edited = edited_draft.strip()
+                            if not clean_edited:
+                                st.error("Cannot send an empty reply.")
+                            else:
+                                if draft.reply_id:
+                                    set_reply_action(conn, draft.reply_id, "edited", final_reply=clean_edited)
+                                st.success("Logged edited draft!")
 
                     with col_a3:
-                        if st.button("✕ Discard", key="manual_btn_discard", use_container_width=True):
+                        if st.button("✕ Discard", key=f"manual_btn_discard_{draft.reply_id}", use_container_width=True):
                             if draft.reply_id:
                                 set_reply_action(conn, draft.reply_id, "discarded")
                             st.info("Logged as discarded.")

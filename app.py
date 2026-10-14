@@ -24,9 +24,15 @@ st.set_page_config(
 apply_custom_styles()
 
 
+@st.cache_data(ttl=15, show_spinner=False)
+def get_engine_status() -> dict:
+    """Cache Ollama status check for 15s to eliminate synchronous socket overhead on Streamlit reruns."""
+    return ollama_status()
+
+
 def main():
-    # 1. Check Ollama status
-    status = ollama_status()
+    # 1. Check Ollama status with fast 15s cache
+    status = get_engine_status()
     is_ollama_up = status["reachable"]
     available_models = status.get("models", [])
 

@@ -30,7 +30,7 @@ def build_context(
     seller_id: int,
     message: str | None = None,
     *,
-    max_products: int = 40,
+    max_products: int = 250,
 ) -> Context:
     """Build the context package for a given seller to feed the prompt.
 

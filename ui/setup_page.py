@@ -296,9 +296,12 @@ def render_setup_page(active_slug: str):
                             """,
                             unsafe_allow_html=True,
                         )
-                        if st.button("Delete Policy", key=f"del_pol_{pol['id']}", type="secondary"):
+                        can_del_pol = len(policies) > 1
+                        if st.button("Delete Policy", key=f"del_pol_{pol['id']}", type="secondary", disabled=not can_del_pol):
                             delete_policy(conn, pol["id"])
                             st.rerun()
+                        if not can_del_pol:
+                            st.caption("At least 1 policy is required for grounded answers.")
 
             with p_col2:
                 with st.container(border=True):
@@ -358,9 +361,12 @@ def render_setup_page(active_slug: str):
                             """,
                             unsafe_allow_html=True,
                         )
-                        if st.button("Delete Example", key=f"del_samp_{s['id']}", type="secondary"):
+                        can_del_samp = len(samples) > 2
+                        if st.button("Delete Example", key=f"del_samp_{s['id']}", type="secondary", disabled=not can_del_samp):
                             delete_sample_reply(conn, s["id"])
                             st.rerun()
+                        if not can_del_samp:
+                            st.caption("Minimum 2 style examples required for tone grounding.")
 
             with s_col2:
                 with st.container(border=True):
@@ -372,17 +378,20 @@ def render_setup_page(active_slug: str):
                         """,
                         unsafe_allow_html=True,
                     )
-                    with st.form("add_sample_form"):
-                        s_lang = st.selectbox("Language", options=LANGUAGES)
-                        s_msg = st.text_input("Customer Inquiry", placeholder="e.g. What sizes do you have?")
-                        s_rep = st.text_area("Ideal Seller Reply", placeholder="Write the reply matching your tone.", height=90)
-                        if st.form_submit_button("Add Example", type="primary", use_container_width=True):
-                            if not s_msg.strip() or not s_rep.strip():
-                                st.error("Both message and reply are required.")
-                            else:
-                                add_sample_reply(conn, seller_id, s_lang, s_msg.strip(), s_rep.strip())
-                                st.success("Sample added!")
-                                st.rerun()
+                    if len(samples) >= 6:
+                        st.info("Maximum 6 style examples reached. Delete an existing example to add a new one.")
+                    else:
+                        with st.form("add_sample_form"):
+                            s_lang = st.selectbox("Language", options=LANGUAGES)
+                            s_msg = st.text_input("Customer Inquiry", placeholder="e.g. What sizes do you have?")
+                            s_rep = st.text_area("Ideal Seller Reply", placeholder="Write the reply matching your tone.", height=90)
+                            if st.form_submit_button("Add Example", type="primary", use_container_width=True):
+                                if not s_msg.strip() or not s_rep.strip():
+                                    st.error("Both message and reply are required.")
+                                else:
+                                    add_sample_reply(conn, seller_id, s_lang, s_msg.strip(), s_rep.strip())
+                                    st.success("Sample added!")
+                                    st.rerun()
 
         # ----------------- TAB 5: Import / Export -----------------
         with tab_io:

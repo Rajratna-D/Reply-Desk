@@ -18,7 +18,7 @@ AMOUNT_REGEX = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
-# Risk topic definitions covering English, Hindi, Marathi, and Hinglish
+# Risk topic keywords reference (English, Hindi, Marathi, and Hinglish)
 RISK_TOPIC_KEYWORDS: dict[str, list[str]] = {
     "allergy_and_health": [
         "allerg", "gluten", "nut", "walnut", "peanut", "vegan", "diabetic",
@@ -42,6 +42,34 @@ RISK_TOPIC_KEYWORDS: dict[str, list[str]] = {
         "personal number", "address", "call me", "ignore instructions",
         "system prompt", "developer instructions",
     ],
+}
+
+# Precompiled word-boundary patterns for high-performance and false-positive prevention
+RISK_TOPIC_PATTERNS: dict[str, re.Pattern[str]] = {
+    "allergy_and_health": re.compile(
+        r"\b(?:allerg\w*|gluten|nuts?|walnuts?|peanuts?|vegan|diabetic|sugar[-\s]free|pregnan\w*|health\w*|safe\s+to\s+eat)\b"
+        r"|एलर्जी|ॲलर्जी|अलर्जी",
+        re.IGNORECASE,
+    ),
+    "discount_and_bargain": re.compile(
+        r"\b(?:discounts?|bargain\w*|cheaper|sast[aei]|kam\s+(?:karo|kijiye|kardo|karein)|off)\b"
+        r"|छूट|डिस्काउंट|सूट|कमी\s+करा",
+        re.IGNORECASE,
+    ),
+    "wholesale_and_bulk": re.compile(
+        r"\b(?:wholesale|bulk|thok|resell\w*)\b"
+        r"|थोक|घाऊक",
+        re.IGNORECASE,
+    ),
+    "custom_work": re.compile(
+        r"\b(?:custom(?:ize|ise|ized|ised|ization|isation|s)?|stitch\w*|tailor\w*|measure\w*)\b"
+        r"|कस्टम|शिलाई|माप",
+        re.IGNORECASE,
+    ),
+    "private_and_sensitive": re.compile(
+        r"\b(?:phone\s+number|mobile\s+number|contact\s+number|cost\s+price|margin|personal\s+number|address|call\s+me|ignore\s+(?:previous\s+)?instructions|system\s+prompt|developer\s+instructions)\b",
+        re.IGNORECASE,
+    ),
 }
 
 
@@ -81,16 +109,11 @@ def ungrounded_amounts(reply: str, known: set[int]) -> list[int]:
 
 
 def risk_topics(message: str) -> list[str]:
-    """Identify risk topics mentioned in a customer message."""
-    lowered = message.lower()
+    """Identify risk topics mentioned in a customer message with word-boundary awareness."""
     matched: list[str] = []
-
-    for topic, keywords in RISK_TOPIC_KEYWORDS.items():
-        for kw in keywords:
-            if kw.lower() in lowered:
-                matched.append(topic)
-                break
-
+    for topic, pattern in RISK_TOPIC_PATTERNS.items():
+        if pattern.search(message):
+            matched.append(topic)
     return matched
 
 

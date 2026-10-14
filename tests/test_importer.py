@@ -71,13 +71,13 @@ def test_import_products_csv(temp_db, tmp_path):
     data = json.loads(fpath.read_text(encoding="utf-8"))
     import_config(conn, data)
 
-    # Create test CSV
+    # Create test CSV with formatted currency and empty variant_label
     csv_file = tmp_path / "products.csv"
     csv_file.write_text(
         "sku,name,category,description,variant_label,price_inr,stock_status,sizes,colors,notes\n"
-        "CSV-01,Summer Top,Tops,Light cotton top,Small,499,in_stock,S;M;L,Yellow;Pink,Wash cold\n"
-        "CSV-01,Summer Top,Tops,Light cotton top,Large,549,in_stock,S;M;L,Yellow;Pink,Wash cold\n"
-        "CSV-02,Linen Scarf,Accessories,Handloom scarf,Standard,299,in_stock,,Blue,\n",
+        "CSV-01,Summer Top,Tops,Light cotton top,Small,₹ 499,in_stock,S;M;L,Yellow;Pink,Wash cold\n"
+        "CSV-01,Summer Top,Tops,Light cotton top,Large,549.00,in_stock,S;M;L,Yellow;Pink,Wash cold\n"
+        'CSV-02,Linen Scarf,Accessories,Handloom scarf,,"Rs. 1,299/-",in_stock,,Blue,\n',
         encoding="utf-8",
     )
 
@@ -91,6 +91,15 @@ def test_import_products_csv(temp_db, tmp_path):
     assert p is not None
     assert p["name"] == "Summer Top"
 
-    cur.execute("SELECT COUNT(*) FROM product_variants WHERE product_id = ?;", (p["id"],))
-    assert cur.fetchone()[0] == 2
+    cur.execute("SELECT price_inr FROM product_variants WHERE product_id = ? ORDER BY price_inr ASC;", (p["id"],))
+    prices = [r["price_inr"] for r in cur.fetchall()]
+    assert prices == [499, 549]
+
+    # Check CSV-02 parsed blank label as 'Standard' and price as 1299
+    cur.execute("SELECT id FROM products WHERE sku = 'CSV-02';")
+    p2 = cur.fetchone()
+    cur.execute("SELECT label, price_inr FROM product_variants WHERE product_id = ?;", (p2["id"],))
+    v2 = cur.fetchone()
+    assert v2["label"] == "Standard"
+    assert v2["price_inr"] == 1299
     conn.close()

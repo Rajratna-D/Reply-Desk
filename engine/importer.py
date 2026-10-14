@@ -286,6 +286,23 @@ def export_config(conn: sqlite3.Connection, slug: str) -> dict[str, Any]:
     return exported
 
 
+def parse_price_inr(raw: Any) -> int:
+    """Sanitize and parse integer price in INR, stripping currency symbols, commas, and decimals."""
+    if isinstance(raw, (int, float)):
+        return int(round(raw))
+    text = str(raw).strip()
+    for prefix in ("₹", "rs.", "rs", "inr"):
+        if text.lower().startswith(prefix):
+            text = text[len(prefix):].strip()
+    for suffix in ("/-", "rupees", "rs.", "rs", "inr"):
+        if text.lower().endswith(suffix):
+            text = text[:-len(suffix)].strip()
+    text = text.replace(",", "").strip()
+    if "." in text:
+        text = text.split(".")[0].strip()
+    return int(text)
+
+
 def import_products_csv(conn: sqlite3.Connection, slug: str, csv_path: str) -> int:
     """Import products from CSV for an existing shop.
 
@@ -318,21 +335,28 @@ def import_products_csv(conn: sqlite3.Connection, slug: str, csv_path: str) -> i
                 if row.get("colors"):
                     attrs["colors"] = [c.strip() for c in row["colors"].split(";") if c.strip()]
 
+                valid_statuses = {"in_stock", "low_stock", "out_of_stock", "made_to_order"}
+                raw_status = (row.get("stock_status") or "in_stock").strip().lower().replace(" ", "_").replace("-", "_")
+                status = raw_status if raw_status in valid_statuses else "in_stock"
+
                 products_by_sku[sku] = {
                     "sku": sku,
                     "name": row["name"].strip(),
                     "category": row.get("category", "").strip() or None,
                     "description": row.get("description", "").strip() or None,
-                    "stock_status": row.get("stock_status", "in_stock").strip(),
+                    "stock_status": status,
                     "notes": row.get("notes", "").strip() or None,
                     "attributes": attrs,
                     "variants": [],
                 }
 
+            var_label = (row.get("variant_label") or "").strip() or "Standard"
+            price_val = parse_price_inr(row.get("price_inr", "0"))
+
             products_by_sku[sku]["variants"].append(
                 {
-                    "label": row.get("variant_label", "Standard").strip(),
-                    "price_inr": int(row["price_inr"].strip()),
+                    "label": var_label,
+                    "price_inr": price_val,
                 }
             )
 

@@ -1,5 +1,6 @@
 """Owner inbox triage queue designed like a modern merchant support dashboard."""
 
+import html
 import json
 import streamlit as st
 from engine.db import connect, get_seller_by_slug, list_pending_replies, set_reply_action
@@ -140,11 +141,13 @@ def render_inbox_page(active_slug: str):
                     )
 
                 # Customer Inquiry Box
+                escaped_cust_msg = html.escape(cust_msg)
+                escaped_reason = html.escape(reason or "The inquiry mentions details not in your shop catalogue.")
                 st.markdown(
                     f"""
                     <div style="margin: 12px 0 14px 0; background: rgba(59, 130, 246, 0.05); border-left: 3px solid #3b82f6; border-radius: 0 8px 8px 0; padding: 12px 16px;">
                         <div style="font-size: 0.72rem; color: #93c5fd; text-transform: uppercase; font-weight: 600; letter-spacing: 0.04em; margin-bottom: 4px;">WhatsApp Customer Inquiry</div>
-                        <div style="font-size: 1.05rem; color: #f8fafc; font-weight: 500;">"{cust_msg}"</div>
+                        <div style="font-size: 1.05rem; color: #f8fafc; font-weight: 500;">"{escaped_cust_msg}"</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -155,7 +158,7 @@ def render_inbox_page(active_slug: str):
                     st.markdown(
                         f"""
                         <div class="alert-card-danger">
-                            <strong>⚠️ Needs Owner Review:</strong> {reason or 'The inquiry mentions details not in your shop catalogue.'}
+                            <strong>⚠️ Needs Owner Review:</strong> {escaped_reason}
                         </div>
                         """,
                         unsafe_allow_html=True,
@@ -218,8 +221,12 @@ def render_inbox_page(active_slug: str):
 
                 with col_b2:
                     if st.button("✏️ Send Edited", key=f"btn_edit_{item_id}", use_container_width=True):
-                        set_reply_action(conn, item_id, "edited", final_reply=edited_text.strip())
-                        st.rerun()
+                        clean_edited = edited_text.strip()
+                        if not clean_edited:
+                            st.error("Cannot send an empty reply. Please enter a message or discard.")
+                        else:
+                            set_reply_action(conn, item_id, "edited", final_reply=clean_edited)
+                            st.rerun()
 
                 with col_b3:
                     if st.button("✕ Discard", key=f"btn_discard_{item_id}", use_container_width=True):

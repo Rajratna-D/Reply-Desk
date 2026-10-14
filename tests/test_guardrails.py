@@ -54,6 +54,11 @@ def test_risk_topics():
     # Sensitive
     assert "private_and_sensitive" in risk_topics("What is the owner's phone number?")
 
+    # False positive prevention (word boundary checks)
+    assert risk_topics("Can you deliver to our office in 10 minutes?") == []
+    assert risk_topics("Do you have coffee cake or donuts?") == []
+    assert risk_topics("I am a happy customer looking for sarees.") == []
+
 
 def test_script_of():
     assert script_of("Hello, how much is this kurti?") == "latin"

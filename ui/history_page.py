@@ -1,5 +1,6 @@
 """History page for reviewing past drafts and actions."""
 
+import html
 import json
 import streamlit as st
 from engine.db import connect, get_seller_by_slug, list_history
@@ -103,7 +104,7 @@ def render_history_page(active_slug: str):
             if st.button("🔄 Refresh", use_container_width=True):
                 st.rerun()
 
-        history_rows = list_history(conn, seller_id, action_filter=action_choice)
+        history_rows = list_history(conn, seller_id, action_filter=action_choice, limit=100)
 
         # Apply in-memory flag filter
         filtered_rows = []
@@ -165,23 +166,25 @@ def render_history_page(active_slug: str):
                         unsafe_allow_html=True,
                     )
 
+                escaped_cust_msg = html.escape(row["customer_message"])
                 st.markdown(
                     f"""
                     <div style="margin: 10px 0; background: rgba(255, 255, 255, 0.02); border-left: 2px solid #3b82f6; border-radius: 0 6px 6px 0; padding: 8px 12px;">
                         <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Customer Question:</span>
-                        <div style="font-size: 0.95rem; color: #f8fafc; margin-top: 2px;">"{row['customer_message']}"</div>
+                        <div style="font-size: 0.95rem; color: #f8fafc; margin-top: 2px;">"{escaped_cust_msg}"</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
                 if row["final_reply"] and row["final_reply"] != row["drafted_reply"]:
+                    escaped_final = html.escape(row["final_reply"])
                     st.markdown(
                         f"""
                         <div style="margin-bottom: 6px;">
                             <span style="font-size: 0.72rem; color: #34d399; font-weight: 600; text-transform: uppercase;">Final Sent Reply (Edited):</span>
                             <div style="font-size: 0.92rem; color: #f1f5f9; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 6px; padding: 8px 12px; margin-top: 2px;">
-                                {row['final_reply']}
+                                {escaped_final}
                             </div>
                         </div>
                         """,
@@ -190,12 +193,13 @@ def render_history_page(active_slug: str):
                     with st.expander("View initial AI draft"):
                         st.caption(row["drafted_reply"])
                 else:
+                    escaped_draft = html.escape(row["drafted_reply"])
                     st.markdown(
                         f"""
                         <div style="margin-bottom: 6px;">
                             <span style="font-size: 0.72rem; color: #818cf8; font-weight: 600; text-transform: uppercase;">Drafted Reply:</span>
                             <div style="font-size: 0.92rem; color: #f1f5f9; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 6px; padding: 8px 12px; margin-top: 2px;">
-                                {row['drafted_reply']}
+                                {escaped_draft}
                             </div>
                         </div>
                         """,
@@ -203,10 +207,11 @@ def render_history_page(active_slug: str):
                     )
 
                 if row["needs_check"]:
+                    escaped_flag = html.escape(row["check_reason"] or "Uncatalogued details")
                     st.markdown(
                         f"""
                         <div style="font-size: 0.78rem; color: #f87171; background: rgba(239, 68, 68, 0.08); border-radius: 4px; padding: 4px 8px; margin-top: 6px;">
-                            ⚠️ <strong>Flagged:</strong> {row['check_reason'] or 'Uncatalogued details'}
+                            ⚠️ <strong>Flagged:</strong> {escaped_flag}
                         </div>
                         """,
                         unsafe_allow_html=True,

@@ -1,5 +1,6 @@
 """Customer chat simulator designed like a modern messenger (WhatsApp/Instagram style)."""
 
+import html
 import streamlit as st
 from engine.db import connect, get_seller_by_slug, list_history
 from engine.service import draft_reply
@@ -32,8 +33,8 @@ def render_customer_chat_page(active_slug: str):
 
         seller_id = seller["id"]
         # Fetch conversation stream from SQLite (last 20 messages, chronological order)
-        raw_history = list_history(conn, seller_id, action_filter="all")
-        chat_messages = list(reversed(raw_history[:20]))
+        raw_history = list_history(conn, seller_id, action_filter="all", limit=20)
+        chat_messages = list(reversed(raw_history))
     finally:
         conn.close()
 
@@ -106,10 +107,11 @@ def render_customer_chat_page(active_slug: str):
                 for row in chat_messages:
                     # Customer message bubble (Right aligned, WhatsApp green)
                     time_str = row["created_at"].split(" ")[-1][:5] if " " in row["created_at"] else ""
+                    escaped_user_msg = html.escape(row["customer_message"])
                     st.markdown(
                         f"""
                         <div class="chat-bubble-customer">
-                            <div>{row["customer_message"]}</div>
+                            <div>{escaped_user_msg}</div>
                             <div style="font-size: 0.68rem; opacity: 0.75; text-align: right; margin-top: 3px;">
                                 {time_str} <span style="color: #6ee7b7;">✓✓</span>
                             </div>
@@ -121,19 +123,27 @@ def render_customer_chat_page(active_slug: str):
                     # Shop reply status bubble (Left aligned)
                     action = row["seller_action"]
                     if action in ("sent_as_is", "edited"):
-                        reply_body = row["final_reply"] if row["final_reply"] else row["drafted_reply"]
+                        raw_reply = row["final_reply"] if row["final_reply"] else row["drafted_reply"]
+                        escaped_reply = html.escape(raw_reply)
                         st.markdown(
                             f"""
                             <div class="chat-bubble-shop">
                                 <div style="font-size: 0.72rem; color: #34d399; font-weight: 600; margin-bottom: 3px;">{shop_name}</div>
-                                <div>{reply_body}</div>
+                                <div>{escaped_reply}</div>
                                 <div style="font-size: 0.68rem; opacity: 0.55; text-align: right; margin-top: 3px;">Delivered</div>
                             </div>
                             """,
                             unsafe_allow_html=True,
                         )
                     elif action == "discarded":
-                        pass
+                        st.markdown(
+                            """
+                            <div style="font-size: 0.76rem; color: #64748b; font-style: italic; margin-left: 10px; margin-bottom: 8px;">
+                                ✕ The shop closed this inquiry without sending a response.
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
                     else:
                         # Pending owner approval in inbox
                         st.markdown(

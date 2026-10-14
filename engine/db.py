@@ -13,7 +13,7 @@ SCHEMA_FILE = Path(__file__).resolve().parent.parent / "db" / "schema.sql"
 
 
 def connect(db_path: str | None = None) -> sqlite3.Connection:
-    """Open a SQLite connection with foreign keys enabled and row_factory configured."""
+    """Open a SQLite connection with WAL mode, foreign keys enabled, and row_factory configured."""
     if db_path is None:
         try:
             settings = load_settings()
@@ -24,9 +24,14 @@ def connect(db_path: str | None = None) -> sqlite3.Connection:
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    conn = sqlite3.connect(str(path))
+    conn = sqlite3.connect(str(path), timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
+    # WAL mode allows concurrent readers and writers across multi-window Streamlit sessions
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA synchronous = NORMAL;")
+    conn.execute("PRAGMA busy_timeout = 30000;")
+    conn.execute("PRAGMA cache_size = -64000;")
     return conn
 
 
@@ -185,37 +190,30 @@ def list_history(
     conn: sqlite3.Connection,
     seller_id: int,
     action_filter: str | None = None,
+    limit: int | None = None,
 ) -> list[sqlite3.Row]:
-    """Fetch history rows for a seller, newest first, with optional action filter."""
+    """Fetch history rows for a seller, newest first, with optional action filter and limit."""
     cur = conn.cursor()
+    query = """
+        SELECT * FROM reply_log
+        WHERE seller_id = ?
+    """
+    params: list[Any] = [seller_id]
+
     if action_filter and action_filter != "all":
         if action_filter == "pending":
-            cur.execute(
-                """
-                SELECT * FROM reply_log
-                WHERE seller_id = ? AND seller_action IS NULL
-                ORDER BY created_at DESC, id DESC;
-                """,
-                (seller_id,),
-            )
+            query += " AND seller_action IS NULL"
         else:
-            cur.execute(
-                """
-                SELECT * FROM reply_log
-                WHERE seller_id = ? AND seller_action = ?
-                ORDER BY created_at DESC, id DESC;
-                """,
-                (seller_id, action_filter),
-            )
-    else:
-        cur.execute(
-            """
-            SELECT * FROM reply_log
-            WHERE seller_id = ?
-            ORDER BY created_at DESC, id DESC;
-            """,
-            (seller_id,),
-        )
+            query += " AND seller_action = ?"
+            params.append(action_filter)
+
+    query += " ORDER BY created_at DESC, id DESC"
+
+    if limit is not None and limit > 0:
+        query += " LIMIT ?"
+        params.append(limit)
+
+    cur.execute(query, tuple(params))
     return cur.fetchall()
 
 
@@ -346,11 +344,15 @@ def add_or_update_product(
         cur.execute("SELECT id FROM products WHERE seller_id = ? AND sku = ?;", (seller_id, sku))
         product_id = cur.fetchone()["id"]
 
-        # Re-sync variants
-        conn.execute("DELETE FROM product_variants WHERE product_id = ?;", (product_id,))
+        # Upsert variants preserving existing variants for multi-variant products
         for v in variants:
             conn.execute(
-                "INSERT INTO product_variants (product_id, label, price_inr) VALUES (?, ?, ?);",
+                """
+                INSERT INTO product_variants (product_id, label, price_inr)
+                VALUES (?, ?, ?)
+                ON CONFLICT(product_id, label) DO UPDATE SET
+                    price_inr = excluded.price_inr;
+                """,
                 (product_id, v["label"], int(v["price_inr"])),
             )
         return product_id
