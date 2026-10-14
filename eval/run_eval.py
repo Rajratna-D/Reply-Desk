@@ -77,9 +77,14 @@ def score_reply(case: dict[str, Any], draft: Draft) -> dict[str, Any]:
         group_matched = False
         for alt in group:
             norm_alt = normalize_for_facts(str(alt))
-            if norm_alt in norm_reply:
-                group_matched = True
-                break
+            if norm_alt.isdigit():
+                if re.search(r"(?<!\d)" + re.escape(norm_alt) + r"(?!\d)", norm_reply):
+                    group_matched = True
+                    break
+            else:
+                if norm_alt in norm_reply:
+                    group_matched = True
+                    break
         if not group_matched:
             facts_ok = False
             missing_groups.append(group)
@@ -87,9 +92,14 @@ def score_reply(case: dict[str, Any], draft: Draft) -> dict[str, Any]:
     forbidden_found = []
     for forbidden in must_not_include:
         norm_forbidden = normalize_for_facts(str(forbidden))
-        if norm_forbidden in norm_reply:
-            facts_ok = False
-            forbidden_found.append(forbidden)
+        if norm_forbidden.isdigit():
+            if re.search(r"(?<!\d)" + re.escape(norm_forbidden) + r"(?!\d)", norm_reply):
+                facts_ok = False
+                forbidden_found.append(forbidden)
+        else:
+            if norm_forbidden in norm_reply:
+                facts_ok = False
+                forbidden_found.append(forbidden)
 
     # 2. needs_check_ok check
     expect_check = bool(case.get("expect_needs_check", False))

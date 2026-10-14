@@ -154,3 +154,45 @@ def test_eval_database_logging(temp_db):
     assert results[0]["prompt_tokens"] == 450
     assert results[0]["output_tokens"] == 32
     conn.close()
+
+
+def test_score_reply_digit_boundary_matching():
+    """Verify that pure digits require word/digit boundaries, so 650 does not match 50."""
+    case = {
+        "id": "SC-16",
+        "language": "en",
+        "must_include": [["50"]],
+        "must_not_include": [],
+        "expect_needs_check": False,
+    }
+
+    # "650" does not satisfy "50"
+    draft_650 = Draft(
+        reply="The 500g chocolate truffle cake is ₹650. Delivery is free for orders over ₹800.",
+        language="en",
+        needs_check=False,
+        reason="",
+        ungrounded_amounts=[],
+        risk_topics=[],
+        model="test-model",
+        latency_ms=1000,
+    )
+    score_650 = score_reply(case, draft_650)
+    assert score_650["facts_ok"] is False
+    assert score_650["passed"] is False
+
+    # "₹50" satisfies "50"
+    draft_50 = Draft(
+        reply="The 500g chocolate truffle cake is ₹650. Delivery charge is ₹50.",
+        language="en",
+        needs_check=False,
+        reason="",
+        ungrounded_amounts=[],
+        risk_topics=[],
+        model="test-model",
+        latency_ms=1000,
+    )
+    score_50 = score_reply(case, draft_50)
+    assert score_50["facts_ok"] is True
+    assert score_50["passed"] is True
+
