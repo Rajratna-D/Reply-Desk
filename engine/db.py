@@ -53,6 +53,108 @@ def init_fts(conn: sqlite3.Connection) -> bool:
         return False
 
 
+def ensure_schema_migrations(conn: sqlite3.Connection) -> None:
+    """Safely apply backward-compatible column and table migrations if missing."""
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sellers';")
+        if not cur.fetchone():
+            return
+
+        # 1. embeddings_cache table
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS embeddings_cache (
+                seller_id   INTEGER NOT NULL,
+                item_key    TEXT    NOT NULL,
+                text_hash   TEXT    NOT NULL,
+                vector_json TEXT    NOT NULL,
+                created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (seller_id, item_key, text_hash)
+            );
+            """
+        )
+
+        # 2. Check policies table columns
+        cur.execute("PRAGMA table_info(policies);")
+        policy_cols = {row["name"] for row in cur.fetchall()}
+        if "source_type" not in policy_cols and "id" in policy_cols:
+            conn.execute("ALTER TABLE policies ADD COLUMN source_type TEXT NOT NULL DEFAULT 'config';")
+
+        # 3. Check sample_replies table columns
+        cur.execute("PRAGMA table_info(sample_replies);")
+        sample_cols = {row["name"] for row in cur.fetchall()}
+        if "source_type" not in sample_cols and "id" in sample_cols:
+            conn.execute("ALTER TABLE sample_replies ADD COLUMN source_type TEXT NOT NULL DEFAULT 'config';")
+
+        # 4. Check reply_log telemetry columns
+        cur.execute("PRAGMA table_info(reply_log);")
+        reply_cols = {row["name"] for row in cur.fetchall()}
+        if "routed_model" not in reply_cols and "id" in reply_cols:
+            conn.execute("ALTER TABLE reply_log ADD COLUMN routed_model TEXT;")
+        if "retrieval_mode" not in reply_cols and "id" in reply_cols:
+            conn.execute("ALTER TABLE reply_log ADD COLUMN retrieval_mode TEXT;")
+        if "grounding_status" not in reply_cols and "id" in reply_cols:
+            conn.execute("ALTER TABLE reply_log ADD COLUMN grounding_status TEXT;")
+        if "triage_badge" not in reply_cols and "id" in reply_cols:
+            conn.execute("ALTER TABLE reply_log ADD COLUMN triage_badge TEXT;")
+
+        cur = conn.execute("PRAGMA table_info(eval_results);")
+        eval_cols = {row[1] for row in cur.fetchall()}
+        if "numeric_grounding_ok" not in eval_cols and "id" in eval_cols:
+            conn.execute("ALTER TABLE eval_results ADD COLUMN numeric_grounding_ok INTEGER;")
+        if "retrieval_mode" not in eval_cols and "id" in eval_cols:
+            conn.execute("ALTER TABLE eval_results ADD COLUMN retrieval_mode TEXT;")
+
+        conn.commit()
+    except Exception:
+        pass
+
+
+def get_cached_embedding(
+    conn: sqlite3.Connection,
+    seller_id: int,
+    item_key: str,
+    text_hash: str,
+) -> list[float] | None:
+    """Fetch cached embedding vector from SQLite embeddings_cache."""
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT vector_json FROM embeddings_cache WHERE seller_id = ? AND item_key = ? AND text_hash = ?;",
+            (seller_id, item_key, text_hash),
+        )
+        row = cur.fetchone()
+        if row:
+            return json.loads(row[0])
+    except Exception:
+        return None
+    return None
+
+
+def save_cached_embedding(
+    conn: sqlite3.Connection,
+    seller_id: int,
+    item_key: str,
+    text_hash: str,
+    vector: list[float],
+) -> None:
+    """Store or update embedding vector in SQLite embeddings_cache."""
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO embeddings_cache (seller_id, item_key, text_hash, vector_json)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(seller_id, item_key, text_hash) DO UPDATE SET
+                    vector_json = excluded.vector_json;
+                """,
+                (seller_id, item_key, text_hash, json.dumps(vector)),
+            )
+    except Exception:
+        pass
+
+
 def connect(db_path: str | None = None) -> sqlite3.Connection:
     """Open a SQLite connection with WAL mode, foreign keys enabled, and row_factory configured."""
     if db_path is None:
@@ -73,6 +175,7 @@ def connect(db_path: str | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous = NORMAL;")
     conn.execute("PRAGMA busy_timeout = 30000;")
     conn.execute("PRAGMA cache_size = -64000;")
+    ensure_schema_migrations(conn)
     init_fts(conn)
     return conn
 
@@ -93,6 +196,7 @@ def init_db(db_path: str | None = None) -> None:
             conn.executescript(schema_sql)
             conn.commit()
 
+        ensure_schema_migrations(conn)
         init_fts(conn)
     finally:
         conn.close()
@@ -144,8 +248,12 @@ def log_reply(
     latency_ms: int | None = None,
     seller_action: str | None = None,
     final_reply: str | None = None,
+    routed_model: str | None = None,
+    retrieval_mode: str | None = None,
+    grounding_status: str | None = None,
+    triage_badge: str | None = None,
 ) -> int:
-    """Insert a draft into reply_log and return the generated row id."""
+    """Insert a draft into reply_log with telemetry and return the generated row id."""
     with conn:
         cur = conn.cursor()
         cur.execute(
@@ -153,8 +261,9 @@ def log_reply(
             INSERT INTO reply_log (
                 seller_id, customer_message, detected_language, drafted_reply,
                 needs_check, check_reason, ungrounded_amounts, risk_topics,
-                model, latency_ms, seller_action, final_reply
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                model, latency_ms, seller_action, final_reply,
+                routed_model, retrieval_mode, grounding_status, triage_badge
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             (
                 seller_id,
@@ -169,6 +278,10 @@ def log_reply(
                 latency_ms,
                 seller_action,
                 final_reply,
+                routed_model or model,
+                retrieval_mode or "fts5_bm25",
+                grounding_status or ("grounded" if not needs_check else "unverified"),
+                triage_badge or ("AUTO-DRAFT READY" if not needs_check else "NEEDS HUMAN"),
             ),
         )
         return cur.lastrowid  # type: ignore[return-value]
@@ -299,10 +412,24 @@ def list_products_full(conn: sqlite3.Connection, seller_id: int) -> list[dict[st
     return products
 
 
+FTS5_CONTROL_WORDS = {"AND", "OR", "NOT", "NEAR"}
+
+
 def sanitize_fts_query(text: str) -> str:
-    """Extract valid alphanumeric words across Latin, digits, and Devanagari scripts for FTS5."""
+    """Sanitize and extract valid alphanumeric tokens for SQLite FTS5 queries.
+
+    Strips control operators and punctuation, filters FTS5 keywords,
+    and supports Unicode scripts (Devanagari, Latin, digits) up to 25 tokens.
+    """
+    if not text:
+        return ""
+    # Extract clean words across Latin, digits, and Devanagari Unicode
     tokens = re.findall(r"[a-zA-Z0-9_\u0900-\u097F]+", text)
-    clean_tokens = [f'"{tok}"*' for tok in tokens if len(tok) >= 2]
+    clean_tokens = [
+        f'"{tok}"*'
+        for tok in tokens
+        if len(tok) >= 2 and tok.upper() not in FTS5_CONTROL_WORDS
+    ][:25]
     return " OR ".join(clean_tokens)
 
 
@@ -576,6 +703,8 @@ def record_eval_result(
     prompt_tokens: int | None = None,
     output_tokens: int | None = None,
     tone_score: int | None = None,
+    numeric_grounding_ok: bool | None = None,
+    retrieval_mode: str | None = None,
 ) -> None:
     """Record a single evaluation test case result."""
     with conn:
@@ -584,8 +713,9 @@ def record_eval_result(
             INSERT INTO eval_results (
                 run_id, case_id, shop_slug, language, category, split,
                 reply, needs_check, facts_ok, needs_check_ok, language_ok,
-                language_label_ok, latency_ms, prompt_tokens, output_tokens, tone_score
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                language_label_ok, latency_ms, prompt_tokens, output_tokens, tone_score,
+                numeric_grounding_ok, retrieval_mode
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(run_id, case_id) DO UPDATE SET
                 reply = excluded.reply,
                 needs_check = excluded.needs_check,
@@ -596,7 +726,9 @@ def record_eval_result(
                 latency_ms = excluded.latency_ms,
                 prompt_tokens = excluded.prompt_tokens,
                 output_tokens = excluded.output_tokens,
-                tone_score = excluded.tone_score;
+                tone_score = excluded.tone_score,
+                numeric_grounding_ok = excluded.numeric_grounding_ok,
+                retrieval_mode = excluded.retrieval_mode;
             """,
             (
                 run_id,
@@ -615,6 +747,8 @@ def record_eval_result(
                 prompt_tokens,
                 output_tokens,
                 tone_score,
+                None if numeric_grounding_ok is None else (1 if numeric_grounding_ok else 0),
+                retrieval_mode,
             ),
         )
 
@@ -670,6 +804,56 @@ def get_eval_results(conn: sqlite3.Connection, run_id: int) -> list[sqlite3.Row]
         (run_id,),
     )
     return cur.fetchall()
+
+
+def save_faq_pair(
+    conn: sqlite3.Connection,
+    seller_id: int,
+    question: str,
+    reply: str,
+    topic: str = "other",
+    language: str = "en",
+) -> int:
+    """Save an approved Q&A pair to the seller policies and sample replies, updating search."""
+    if language not in ("en", "hi", "mr", "hinglish"):
+        language = "en"
+    clean_topic = topic if topic in ("delivery", "returns", "payment", "hours", "ordering", "other") else "other"
+    title = question.strip()[:80]
+    if not title:
+        title = "Customer FAQ"
+
+    with conn:
+        cur = conn.cursor()
+        # Save as policy so it gets retrieved in policies context
+        cur.execute(
+            """
+            INSERT INTO policies (seller_id, topic, title, body, source_type)
+            VALUES (?, ?, ?, ?, 'seller_faq')
+            ON CONFLICT(seller_id, topic, title) DO UPDATE SET
+                body = excluded.body,
+                source_type = 'seller_faq';
+            """,
+            (seller_id, clean_topic, title, reply.strip()),
+        )
+        policy_id = cur.lastrowid
+
+        # Also save as sample reply so few-shot demonstrations include it
+        cur.execute(
+            """
+            INSERT INTO sample_replies (seller_id, language, customer_message, reply, source_type)
+            VALUES (?, ?, ?, ?, 'seller_faq');
+            """,
+            (seller_id, language, question.strip(), reply.strip()),
+        )
+
+        # Refresh / optimize FTS index if available
+        if is_fts5_available(conn):
+            try:
+                conn.execute("INSERT INTO products_fts(products_fts) VALUES('optimize');")
+            except Exception:
+                pass
+
+        return policy_id or 1
 
 
 if __name__ == "__main__":

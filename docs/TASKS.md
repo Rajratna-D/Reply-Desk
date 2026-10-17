@@ -77,6 +77,8 @@ Rule: work one milestone at a time. Tick boxes as you finish. Add a dated line t
 ## Stretch (only if everything above is done)
 
 - [x] FTS5 retrieval for large catalogues (`db/fts.sql`).
+- [x] Documented post-hackathon upgrade roadmap in `docs/FUTURE_UPGRADES.md` (Auto-Pilot confidence gating, dynamic negotiation engine, sentiment triage, WhatsApp Cloud API webhooks).
 - [ ] Quick fine-tune or prompt-tuning comparison for Marathi.
 - [ ] Save the agent session with DevRelay and embed it in the post.
 - [ ] Export a shop to a printable FAQ sheet.
+

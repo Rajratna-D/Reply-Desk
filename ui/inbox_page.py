@@ -115,6 +115,22 @@ def render_inbox_page(active_slug: str):
                 except Exception:
                     pass
 
+            # Triage badge computation (Auto-Draft Ready, Policy Check, Needs Human)
+            cust_msg_lower = cust_msg.lower()
+            is_blocked = "prompt injection" in reason.lower() or "blocked" in reason.lower()
+            is_unverified = bool(ungrounded) or "ungrounded" in reason.lower()
+
+            if is_blocked or is_unverified or "private" in reason.lower():
+                triage_badge = '<span class="rd-badge badge-flagged" style="font-weight: 700;">🚨 NEEDS HUMAN</span>'
+            elif model_used == "gemma2:9b" or any(w in cust_msg_lower for w in ("refund", "return", "cancel", "damaged", "broken", "complaint", "wrong", "missing", "dispute")):
+                triage_badge = '<span class="rd-badge badge-warning" style="font-weight: 700;">⚖️ POLICY CHECK</span>'
+            else:
+                triage_badge = '<span class="rd-badge badge-clean" style="font-weight: 700;">⚡ AUTO-DRAFT READY</span>'
+
+            escaped_lang = html.escape(lang)
+            escaped_model = html.escape(str(model_used))
+            escaped_created = html.escape(str(item['created_at']))
+
             with st.container(border=True):
                 # Header row: Tags & Telemetry
                 c_meta_left, c_meta_right = st.columns([3, 2])
@@ -122,9 +138,10 @@ def render_inbox_page(active_slug: str):
                     st.markdown(
                         f"""
                         <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                            <span class="rd-badge badge-lang">{lang}</span>
-                            <span class="rd-badge badge-model">{model_used}</span>
-                            <span style="font-size: 0.78rem; color: #64748b;">{item['created_at']}</span>
+                            {triage_badge}
+                            <span class="rd-badge badge-lang">{escaped_lang}</span>
+                            <span class="rd-badge badge-model">{escaped_model}</span>
+                            <span style="font-size: 0.78rem; color: #64748b;">{escaped_created}</span>
                         </div>
                         """,
                         unsafe_allow_html=True,

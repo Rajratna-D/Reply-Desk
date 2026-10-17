@@ -103,3 +103,53 @@ def test_import_products_csv(temp_db, tmp_path):
     assert v2["label"] == "Standard"
     assert v2["price_inr"] == 1299
     conn.close()
+
+
+def test_seller_faq_survives_reimport(temp_db):
+    from engine.db import save_faq_pair, search_products_fts
+
+    conn = connect(temp_db)
+    fpath = CONFIG_DIR / "urban_thread.json"
+    data = json.loads(fpath.read_text(encoding="utf-8"))
+
+    # Initial import
+    seller_id = import_config(conn, data, replace=True)
+
+    # Save custom seller FAQ pair
+    faq_id = save_faq_pair(
+        conn,
+        seller_id=seller_id,
+        question="Can I get premium gift packaging?",
+        reply="Yes, premium gift packaging is available for ₹75 extra.",
+        topic="ordering",
+    )
+    assert faq_id > 0
+
+    # Verify products are searchable via FTS5
+    initial_matches = search_products_fts(conn, seller_id, "cotton kurti")
+    assert len(initial_matches) > 0
+
+    # Re-import shop with replace=True (simulates re-running import_config or verify_shops)
+    reimported_id = import_config(conn, data, replace=True)
+    assert reimported_id == seller_id
+
+    # Verify seller FAQ survived in policies
+    cur = conn.cursor()
+    cur.execute("SELECT id, topic, title, body, source_type FROM policies WHERE id = ?;", (faq_id,))
+    preserved_policy = cur.fetchone()
+    assert preserved_policy is not None
+    assert preserved_policy["source_type"] == "seller_faq"
+    assert "₹75" in preserved_policy["body"]
+
+    # Verify seller FAQ survived in sample_replies
+    cur.execute("SELECT id, customer_message, reply, source_type FROM sample_replies WHERE seller_id = ? AND source_type = 'seller_faq';", (seller_id,))
+    preserved_sample = cur.fetchone()
+    assert preserved_sample is not None
+    assert "premium gift packaging" in preserved_sample["customer_message"]
+
+    # Verify products remain searchable in FTS5 after re-import FTS rebuild
+    rebuilt_matches = search_products_fts(conn, seller_id, "cotton kurti")
+    assert len(rebuilt_matches) > 0
+    assert any("Kurti" in m["name"] for m in rebuilt_matches)
+
+    conn.close()

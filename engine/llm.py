@@ -62,31 +62,22 @@ def _clean_json_markdown(text: str) -> str:
     return stripped
 
 
-def generate_json(
+def _generate_json_single_model(
     messages: list[dict[str, str]],
     schema: dict[str, Any],
     *,
     model: str,
-    host: str = "http://localhost:11434",
-    num_ctx: int = 4096,
-    temperature: float = 0.2,
+    host: str,
+    num_ctx: int,
+    temperature: float,
 ) -> dict[str, Any]:
-    """Call Ollama chat API requesting structured JSON output with fallback and one retry.
-
-    Returns:
-        Parsed dict matching schema.
-    Raises:
-        OllamaUnavailable: If Ollama cannot be reached.
-        ModelMissing: If model is not found in Ollama.
-        BadModelOutput: If output is not valid JSON after retry.
-    """
+    """Execute Ollama chat with structured JSON output and single retry for one model."""
     client = ollama.Client(host=host)
     options = {
         "num_ctx": num_ctx,
         "temperature": temperature,
     }
 
-    # Attempt 1: Try with format=schema (structured outputs)
     use_schema_format = True
     raw_content = ""
     last_prompt_tokens: int | None = None
@@ -177,3 +168,64 @@ def generate_json(
         ) from e
 
     raise BadModelOutput(f"Model returned invalid JSON after retry: {raw_content}")
+
+
+def generate_json(
+    messages: list[dict[str, str]],
+    schema: dict[str, Any],
+    *,
+    model: str,
+    fallback_model: str | None = None,
+    host: str = "http://localhost:11434",
+    num_ctx: int = 4096,
+    temperature: float = 0.2,
+) -> dict[str, Any]:
+    """Call Ollama chat API requesting structured JSON output with fallback and one retry.
+
+    Returns:
+        Parsed dict matching schema along with token and routing metadata.
+    Raises:
+        OllamaUnavailable: If Ollama cannot be reached.
+        ModelMissing: If model is not found in Ollama.
+        BadModelOutput: If output is not valid JSON after retry.
+    """
+    routed_model = model
+    try:
+        parsed = _generate_json_single_model(
+            messages=messages,
+            schema=schema,
+            model=routed_model,
+            host=host,
+            num_ctx=num_ctx,
+            temperature=temperature,
+        )
+        parsed["routed_model"] = routed_model
+        parsed["actual_model"] = routed_model
+        parsed["fallback_used"] = False
+        parsed["_routed_model"] = routed_model
+        parsed["_actual_model"] = routed_model
+        parsed["_fallback_used"] = False
+        return parsed
+    except ModelMissing:
+        if fallback_model and fallback_model != routed_model:
+            logger.warning(
+                "Target model '%s' not found in Ollama. Falling back to default model '%s'...",
+                routed_model,
+                fallback_model,
+            )
+            parsed = _generate_json_single_model(
+                messages=messages,
+                schema=schema,
+                model=fallback_model,
+                host=host,
+                num_ctx=num_ctx,
+                temperature=temperature,
+            )
+            parsed["routed_model"] = routed_model
+            parsed["actual_model"] = fallback_model
+            parsed["fallback_used"] = True
+            parsed["_routed_model"] = routed_model
+            parsed["_actual_model"] = fallback_model
+            parsed["_fallback_used"] = True
+            return parsed
+        raise

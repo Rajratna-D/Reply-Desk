@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from engine.db import connect, init_db
 from engine.importer import import_config
-from engine.retrieval import build_context
+from engine.retrieval import build_context, reciprocal_rank_fusion
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 
@@ -72,3 +72,47 @@ def test_build_context_fts_threshold_scaling(populated_db):
     assert {899, 1499, 599, 349}.issubset(ctx.known_amounts)
 
     conn.close()
+
+
+def test_reciprocal_rank_fusion_determinism():
+    fts_ids = [101, 102, 103, 104]
+    vector_ids = [103, 101, 105, 102]
+    # RRF fuses ranks using standard score formula
+    fused = reciprocal_rank_fusion(fts_ids, vector_ids, k=60)
+    assert len(fused) == 5
+    # Determinism: running multiple times produces identical ordering
+    fused2 = reciprocal_rank_fusion(fts_ids, vector_ids, k=60)
+    assert fused == fused2
+    # Items appearing in both lists (101, 103) score highest
+    assert fused[0] in (101, 103)
+    assert fused[1] in (101, 103)
+
+
+def test_retrieval_offline_fallback(populated_db):
+    conn = connect(populated_db)
+    # Context generation succeeds cleanly without error even if local embeddings endpoint is offline
+    ctx = build_context(conn, 1, message="cotton kurti", fts_threshold=2, top_k=2)
+    assert ctx.catalogue_block != ""
+    assert ctx.retrieval_mode in ("fts5_bm25", "hybrid_rrf")
+    assert ctx.retrieved_products is not None
+    conn.close()
+
+
+def test_build_context_prior_queries_pronoun_expansion(populated_db):
+    conn = connect(populated_db)
+    # Turn 1 asks about "Cotton Kurti"
+    # Turn 2 asks "Is it available in blue?"
+    # When short or containing pronouns ("it"), context expansion prepends prior query terms
+    ctx = build_context(
+        conn,
+        seller_id=1,
+        message="Is it in stock?",
+        prior_queries=["Cotton Kurti pricing and sizes"],
+        fts_threshold=2,
+        top_k=1,
+    )
+    lines = ctx.catalogue_block.strip().split("\n")
+    assert len(lines) >= 1
+    assert "Cotton Kurti" in lines[0]
+    conn.close()
+

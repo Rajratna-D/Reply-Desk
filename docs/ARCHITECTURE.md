@@ -63,31 +63,35 @@ class Settings:
     temperature: float = 0.2
 
 def load_settings() -> Settings: ...
+def validate_ollama_url(url: str) -> str: ...  # SSRF protection: restricts endpoint to localhost/127.0.0.1
 ```
-Reads environment variables (and `.env` if present). `model_name` has no hardcoded default; raise a clear error if unset.
+Reads environment variables (and `.env` if present). `validate_ollama_url` enforces local loopback binding to block server-side request forgery.
 
 ### `engine/db.py`
 
 ```python
 def connect(db_path: str | None = None) -> sqlite3.Connection: ...   # row_factory = sqlite3.Row, PRAGMA foreign_keys = ON
-def init_db(db_path: str | None = None) -> None: ...                  # applies db/schema.sql if user_version == 0
+def init_db(db_path: str | None = None) -> None: ...                  # applies db/schema.sql and db/fts.sql
 def get_seller_by_slug(conn, slug: str) -> sqlite3.Row | None: ...
 def list_sellers(conn) -> list[sqlite3.Row]: ...
 def log_reply(conn, seller_id: int, **fields) -> int: ...
 def set_reply_action(conn, reply_id: int, action: str, final_reply: str | None) -> None: ...
+def save_faq_pair(conn, seller_id: int, question: str, reply: str, topic: str = "other", language: str = "en") -> int: ...  # 1-click FAQ persistence
+def get_cached_embedding(conn, seller_id: int, item_key: str, text_hash: str) -> list[float] | None: ...
+def save_cached_embedding(conn, seller_id: int, item_key: str, text_hash: str, vector: list[float]) -> None: ...
 def clear_history(conn, seller_id: int) -> int: ...
 ```
-All SQL parameterized. See `DBMS.md` for schema and migration rules (`PRAGMA user_version`).
+All SQL parameterized. Supports FTS5 virtual tables with real-time sync triggers and persistent SQLite embeddings cache.
 
 ### `engine/importer.py`
 
 ```python
 def validate_config(data: dict) -> None: ...                  # jsonschema; raises ConfigError
-def import_config(conn, data: dict, *, replace: bool = False) -> int: ...   # returns seller_id; one transaction
+def import_config(conn, data: dict, *, replace: bool = False) -> int: ...   # returns seller_id; preserves seller_faq rows
 def export_config(conn, slug: str) -> dict: ...               # same shape as import
 def import_products_csv(conn, slug: str, csv_path: str) -> int: ...
 ```
-Import runs inside one transaction. If `replace` is true, the seller's products, policies, and samples are deleted and reinserted. Round trip `import -> export -> import` must be lossless (tested).
+Import runs inside one transaction. If `replace` is true, config data is refreshed while all merchant-added `seller_faq` policies and samples survive and re-index. Round trip `import -> export -> import` is verified lossless.
 
 ### `engine/retrieval.py`
 
@@ -99,19 +103,23 @@ class Context:
     policies_block: str
     examples: list[dict]       # sample replies (language, customer_message, reply)
     known_amounts: set[int]    # every price and every number that appears in a rupee context in the data
+    retrieved_products: list[dict] = field(default_factory=list)
+    retrieval_mode: str = "fts5_bm25"
 
-def build_context(conn, seller_id: int, message: str | None = None, *, max_products: int = 40) -> Context: ...
+def build_context(conn, seller_id: int, message: str | None = None, *, top_k: int = 15, prior_queries: list[str] | None = None) -> Context: ...
+def reciprocal_rank_fusion(bm25_ranked: list[dict], vector_ranked: list[dict], k: int = 60) -> list[dict]: ...
+def pure_cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float: ...
 ```
 
-Hybrid retrieval: small catalogues (<= 15 products) include the complete catalogue for 100% recall; larger catalogues use SQLite FTS5 BM25 search on customer query to retrieve top-k matching products. Known amounts always preload all catalogue variant prices to preserve guardrail precision.
+Hybrid RRF retrieval: combines SQLite FTS5 BM25 keyword matching with local embedding vector search (pure Python cosine similarity, zero external ML dependencies). Expands short follow-up and pronoun queries using `prior_queries`. Falls back gracefully to BM25 or full catalogue when offline.
 
 ### `engine/prompt.py`
 
 ```python
-def build_messages(ctx: Context, customer_message: str) -> list[dict]: ...   # [{"role":"system",...},{"role":"user",...}]
+def build_messages(ctx: Context, customer_message: str, tone_override: str | None = None) -> list[dict]: ...
 RESPONSE_SCHEMA: dict   # JSON schema for {reply, language, needs_check, reason}
 ```
-Prompt text is defined in `docs/PROMPTS.md`. Keep code and doc in sync.
+Prompt text isolates untrusted customer text using `<untrusted_customer_message>` XML tags to prevent indirect prompt injection, and supports dynamic tone overrides.
 
 ### `engine/llm.py`
 
@@ -120,21 +128,24 @@ class OllamaUnavailable(Exception): ...
 class ModelMissing(Exception): ...
 class BadModelOutput(Exception): ...
 
-def generate_json(messages: list[dict], schema: dict, *, model: str, host: str,
-                  num_ctx: int, temperature: float) -> dict: ...
+def generate_json(messages: list[dict], schema: dict, *, model: str, fallback_model: str | None = None,
+                  host: str, num_ctx: int, temperature: float) -> dict: ...
 def ollama_status(host: str) -> dict: ...     # reachable?, models available
 ```
-Uses structured output when available. On invalid JSON: retry once, then raise `BadModelOutput`.
+Structured JSON output with retry logic and automated local fallback when a secondary model tier is missing.
 
 ### `engine/guardrails.py`
 
 ```python
-def extract_amounts(text: str) -> list[int]: ...          # "₹1,200", "Rs 899", "899 rupees", "1200/-"
+def redact_pii(text: str) -> tuple[str, list[str]]: ...          # masks cards, IDs, contact details while preserving order numbers
+def detect_prompt_injection(text: str) -> tuple[bool, str]: ...   # jailbreak, override, instruction leaking
+def verify_numeric_grounding(draft_reply: str, source_context: str, customer_query: str = "") -> dict: ...
+def extract_amounts(text: str) -> list[int]: ...                  # "₹1,200", "Rs 899", "899 rupees", "1200/-"
 def ungrounded_amounts(reply: str, known: set[int]) -> list[int]: ...
-def risk_topics(message: str) -> list[str]: ...           # allergy, health, discount, wholesale, custom, personal
-def script_of(text: str) -> str: ...                      # "devanagari" | "latin" | "mixed"
+def risk_topics(message: str) -> list[str]: ...                   # allergy, health, discount, wholesale, custom, personal
+def script_of(text: str) -> str: ...                              # "devanagari" | "latin" | "mixed"
 ```
-Amount parsing must handle commas, `₹`, `Rs`, `Rs.`, `INR`, `/-`, and Devanagari digits. Risk topic keywords cover English, Hindi, Marathi, and Hinglish; keep the keyword lists in one constant, documented in `PROMPTS.md`.
+Precompiled regexes for zero-false-positive risk detection and comprehensive numeric grounding verification with query number echoing and 2x to 10x quantity multiplier support.
 
 ### `engine/service.py`
 
@@ -149,28 +160,41 @@ class Draft:
     risk_topics: list[str]
     model: str
     latency_ms: int
-    reply_id: int | None
+    reply_id: int | None = None
+    routed_model: str | None = None
+    actual_model: str | None = None
+    fallback_used: bool = False
+    route_reason: str = ""
+    retrieval_mode: str = "fts5_bm25"
+    unverified_numbers: list[str] = field(default_factory=list)
+    needs_human_review: bool | None = None
+    would_route_to: str | None = None
+    grounding_status: str | None = None
+    triage_badge: str | None = None
 
-def draft_reply(seller_slug: str, message: str, *, model: str | None = None, log: bool = True) -> Draft: ...
+def select_gemma_model(query: str, retrieved_chunks: list[Any], default_model: str = "gemma2:2b") -> dict[str, Any]: ...
+def draft_reply(seller_slug: str, message: str, *, model: str | None = None, log: bool = True,
+                force_model: bool = False, prior_queries: list[str] | None = None,
+                tone_override: str | None = None) -> Draft: ...
 ```
-Steps: load seller, build context, build messages, call model, run guardrails (if ungrounded amounts exist, set `needs_check = True` and append to `reason`), measure latency, log, return. It never sends anything.
+End-to-end orchestration: PII scrubbing, injection short-circuiting, context building, model routing, schema-guided generation, numeric verification, and logging. It never sends anything automatically.
 
 ### `eval/run_eval.py`
 
 ```
-python -m eval.run_eval --model <tag> [--notes "..."] [--shop <slug>] [--limit N]
+python -m eval.run_eval --model <tag> [--split dev|test|all] [--notes "..."] [--shop <slug>]
 ```
-Loads `eval/questions.json`, imports sample shops into a temporary database (so eval never touches real data), runs `draft_reply(log=False)` per case, scores, writes `eval_runs` / `eval_results`, and writes `eval/results/<run>.csv` and `.md`. Scoring rules are in `EVAL_PLAN.md`.
+Loads `eval/questions.json`, imports sample shops into a temporary database, runs `draft_reply(log=False)` per case, scores facts/safety/language, and writes timestamped report files into `eval/reports/`.
 
 ## UI pages (Streamlit)
 
 - Sidebar: shop selector (switches active seller without login), model name, Ollama status indicator.
-- Customer Chat page (`ui/customer_chat_page.py`): Simulated customer chat for side-by-side demo. Shop selector, message input in any supported language/script. Submitting calls `service.draft_reply` and saves with pending status (`seller_action IS NULL`). Messages stored in `st.session_state`. Shows "The shop will reply shortly" until sent. Never exposes drafts or internal flags.
-- Owner Inbox page (`ui/inbox_page.py`): Message triage queue for shop owners. Lists pending drafts (`seller_action IS NULL`) for active shop, newest first. Displays customer message, editable draft, needs-check banner with reason, and warnings. Quick action buttons: "Send as is", "Send edited", "Discard". Optional polling/refresh via `st.fragment(run_every=...)`.
-- Reply page (`ui/reply_page.py`): Manual scratchpad to paste message, click Draft, view flags, copy, or mark action.
-- Setup page (`ui/setup_page.py`): Tabs for Shop, Products, Policies, Sample replies, Import/Export.
+- Customer Chat page (`ui/customer_chat_page.py`): Simulated WhatsApp-style messenger frame for split-screen demo. Shop selector, multilingual customer input, real-time message exchange simulation.
+- Owner Inbox page (`ui/inbox_page.py`): Message triage queue for shop owners. Confidence badges (`AUTO-DRAFT READY`, `POLICY CHECK`, `NEEDS HUMAN`), editable drafts, grounding alerts, and quick actions ("Send as is", "Send edited", "Discard").
+- Reply page (`ui/reply_page.py`): Manual scratchpad with Reply Tone Switcher (*Warm Boutique*, *Concise WhatsApp*, *Polite Hinglish*), live engine telemetry bar, and 1-Click FAQ saving into shop policies.
+- Setup page (`ui/setup_page.py`): Tabs for Shop, Products (with live FTS5 search), Policies, Sample replies, and Import/Export.
 - History page (`ui/history_page.py`): Table of past drafts with status filters.
-- Settings page (`ui/settings_page.py`): Model tag (with list of installed models from Ollama), clear history.
+- Settings page (`ui/settings_page.py`): Model inventory, SSRF security status, hardware offload telemetry, and history purge.
 
 Keep page functions thin; all logic lives in `engine/`.
 

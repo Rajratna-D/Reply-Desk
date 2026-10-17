@@ -6,3 +6,4 @@ data/
 *.db
 eval/results/
 .pytest_cache/
+*.zip

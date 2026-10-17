@@ -1,12 +1,26 @@
-"""Context retrieval and prompt block formatting for ReplyDesk."""
-
+import hashlib
 import json
+import math
+import re
 import sqlite3
-from dataclasses import dataclass
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
 from typing import Any
 
-from engine.db import search_products_fts
+from engine.db import (
+    get_cached_embedding,
+    sanitize_fts_query,
+    save_cached_embedding,
+    search_products_fts,
+)
 from engine.guardrails import extract_amounts, script_of
+
+PRONOUN_OR_SHORT_TOKENS = {
+    "it", "this", "that", "these", "those", "they", "them", "same", "one",
+    "ye", "yeh", "wo", "woh", "iska", "iski", "iske", "uska", "uski", "uske",
+    "ha", "he", "te", "ti", "to", "hya", "tya",
+}
 
 
 @dataclass
@@ -16,6 +30,8 @@ class Context:
     policies_block: str
     examples: list[dict[str, str]]
     known_amounts: set[int]
+    retrieval_mode: str = "fts5_bm25"
+    retrieved_products: list[Any] = field(default_factory=list)
 
 
 STOCK_STATUS_MAP = {
@@ -24,6 +40,72 @@ STOCK_STATUS_MAP = {
     "out_of_stock": "out of stock",
     "made_to_order": "made to order",
 }
+
+# In-memory cache for product embeddings: (seller_id, product_id, text_hash) -> vector
+_EMBEDDING_CACHE: dict[tuple[int, int, str], list[float]] = {}
+
+
+def get_local_embedding(
+    text: str,
+    model: str = "nomic-embed-text",
+    host: str = "http://localhost:11434",
+    timeout: float = 1.5,
+) -> list[float] | None:
+    """Query local Ollama embeddings API with a tight 1.5s timeout.
+
+    Fails gracefully returning None if Ollama is not running or model is missing.
+    """
+    if not text or not text.strip():
+        return None
+
+    url = f"{host.rstrip('/')}/api/embeddings"
+    payload = json.dumps({"model": model, "prompt": text.strip()}).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            if response.status == 200:
+                data = json.loads(response.read().decode("utf-8"))
+                return data.get("embedding")
+    except Exception:
+        return None
+    return None
+
+
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Compute cosine similarity between two float vectors using math.sqrt."""
+    if not a or not b or len(a) != len(b):
+        return 0.0
+
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(y * y for y in b))
+
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def reciprocal_rank_fusion(
+    fts_ids: list[int],
+    vector_ids: list[int],
+    k: int = 60,
+) -> list[int]:
+    """Combine FTS5 and vector rankings using Reciprocal Rank Fusion (RRF)."""
+    scores: dict[int, float] = {}
+
+    for rank, doc_id in enumerate(fts_ids, start=1):
+        scores[doc_id] = scores.get(doc_id, 0.0) + (1.0 / (k + rank))
+
+    for rank, doc_id in enumerate(vector_ids, start=1):
+        scores[doc_id] = scores.get(doc_id, 0.0) + (1.0 / (k + rank))
+
+    return sorted(scores.keys(), key=lambda d: scores[d], reverse=True)
 
 
 def _format_product_line(
@@ -78,15 +160,26 @@ def build_context(
     max_products: int = 250,
     fts_threshold: int = 15,
     top_k: int = 6,
+    prior_queries: list[str] | None = None,
 ) -> Context:
     """Build the context package for a given seller to feed the prompt.
 
     For small catalogues (<= fts_threshold products), includes the whole catalogue
     for 100% recall. For large catalogues (> fts_threshold products), uses SQLite FTS5
-    to retrieve the top_k most relevant products for the customer message.
+    and local embeddings fused via Reciprocal Rank Fusion (RRF) to retrieve top_k items.
     Collects all known prices and currency amounts from products and policies.
     """
     cur = conn.cursor()
+
+    # Determine effective search query for multi-turn conversations
+    search_message = message or ""
+    if message and prior_queries:
+        cleaned_words = re.findall(r"\b\w+\b", message.lower())
+        is_short = len(cleaned_words) < 8
+        has_pronoun = bool(set(cleaned_words) & PRONOUN_OR_SHORT_TOKENS)
+        if (is_short or has_pronoun) and prior_queries:
+            prior_text = prior_queries[-1].strip()
+            search_message = f"{prior_text} {message}".strip()
 
     # 1. Shop details
     cur.execute(
@@ -134,6 +227,7 @@ def build_context(
     total_products = cur.fetchone()[0]
 
     product_rows: list[sqlite3.Row] = []
+    retrieval_mode = "fts5_bm25"
 
     if total_products <= fts_threshold:
         # Small catalogue: inject complete catalogue for 100% recall
@@ -148,19 +242,69 @@ def build_context(
         )
         product_rows = cur.fetchall()
     else:
-        # Large catalogue: use FTS5 smart retrieval based on customer query
-        matched_ids: list[int] = []
-        if message:
-            fts_rows = search_products_fts(conn, seller_id, message, limit=top_k)
-            for r in fts_rows:
-                product_rows.append(r)
-                matched_ids.append(r["id"])
+        # Large catalogue: hybrid retrieval using FTS5 and local embeddings via RRF
+        fts_ids: list[int] = []
+        if search_message:
+            fts_rows = search_products_fts(conn, seller_id, search_message, limit=top_k * 2)
+            fts_ids = [r["id"] for r in fts_rows]
+
+        matched_ids: list[int] = fts_ids
+
+        # Attempt semantic embedding ranking if search_message provided
+        if search_message:
+            query_emb = get_local_embedding(search_message)
+            if query_emb:
+                cur.execute(
+                    "SELECT id, name, category, description FROM products WHERE seller_id = ?;",
+                    (seller_id,),
+                )
+                prod_candidates = cur.fetchall()
+                sim_scores = []
+                for cand in prod_candidates:
+                    cid = cand["id"]
+                    text_repr = f"{cand['name']} {cand['category'] or ''} {cand['description'] or ''}".strip()
+                    t_hash = hashlib.md5(text_repr.encode("utf-8")).hexdigest()
+                    cache_key = (seller_id, cid, t_hash)
+                    cand_emb = _EMBEDDING_CACHE.get(cache_key)
+                    if cand_emb is None:
+                        cand_emb = get_cached_embedding(conn, seller_id, str(cid), t_hash)
+                        if cand_emb is not None:
+                            _EMBEDDING_CACHE[cache_key] = cand_emb
+                        else:
+                            cand_emb = get_local_embedding(text_repr)
+                            if cand_emb:
+                                _EMBEDDING_CACHE[cache_key] = cand_emb
+                                save_cached_embedding(conn, seller_id, str(cid), t_hash, cand_emb)
+                    if cand_emb:
+                        sim = cosine_similarity(query_emb, cand_emb)
+                        sim_scores.append((cid, sim))
+
+                if sim_scores:
+                    sim_scores.sort(key=lambda x: x[1], reverse=True)
+                    vector_ids = [cid for cid, _ in sim_scores]
+                    matched_ids = reciprocal_rank_fusion(fts_ids, vector_ids, k=60)
+                    retrieval_mode = "hybrid_rrf"
+
+        selected_ids = matched_ids[:top_k]
+        if selected_ids:
+            placeholders = ",".join("?" for _ in selected_ids)
+            cur.execute(
+                f"""
+                SELECT id, sku, name, category, description, attributes, stock_status, notes
+                FROM products
+                WHERE seller_id = ? AND id IN ({placeholders});
+                """,
+                (seller_id,) + tuple(selected_ids),
+            )
+            rows_by_id = {r["id"]: r for r in cur.fetchall()}
+            product_rows = [rows_by_id[pid] for pid in selected_ids if pid in rows_by_id]
 
         # Backfill with remaining in-stock products if under top_k
         if len(product_rows) < top_k:
             remaining = top_k - len(product_rows)
-            if matched_ids:
-                placeholders = ",".join("?" for _ in matched_ids)
+            current_ids = [r["id"] for r in product_rows]
+            if current_ids:
+                placeholders = ",".join("?" for _ in current_ids)
                 query = f"""
                     SELECT id, sku, name, category, description, attributes, stock_status, notes
                     FROM products
@@ -168,7 +312,7 @@ def build_context(
                     ORDER BY CASE stock_status WHEN 'in_stock' THEN 1 WHEN 'low_stock' THEN 2 ELSE 3 END, id ASC
                     LIMIT ?;
                 """
-                params = (seller_id,) + tuple(matched_ids) + (remaining,)
+                params = (seller_id,) + tuple(current_ids) + (remaining,)
             else:
                 query = """
                     SELECT id, sku, name, category, description, attributes, stock_status, notes
@@ -247,4 +391,6 @@ def build_context(
         policies_block=policies_block,
         examples=selected_samples,
         known_amounts=known_amounts,
+        retrieval_mode=retrieval_mode,
+        retrieved_products=product_rows,
     )

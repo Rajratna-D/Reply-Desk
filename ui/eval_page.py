@@ -67,8 +67,11 @@ def render_eval_page(active_slug: str):
                 check_rate = round(check_passed / total_cases * 100, 1) if total_cases > 0 else 0.0
                 lang_rate = round(lang_passed / total_cases * 100, 1) if total_cases > 0 else 0.0
 
+                grounding_passed = sum(1 for r in results if r["numeric_grounding_ok"] == 1 or (r["numeric_grounding_ok"] is None and r["facts_ok"]))
+                grounding_rate = round(grounding_passed / total_cases * 100, 1) if total_cases > 0 else 0.0
+
                 # Metric Cards
-                m1, m2, m3, m4, m5 = st.columns(5)
+                m1, m2, m3, m4, m5, m6 = st.columns(6)
                 with m1:
                     pass_color = "#34d399" if pass_rate >= 80 else ("#f59e0b" if pass_rate >= 60 else "#f87171")
                     st.markdown(
@@ -94,13 +97,23 @@ def render_eval_page(active_slug: str):
                     st.markdown(
                         f"""
                         <div class="stat-tile">
+                            <div class="stat-value" style="color: #34d399;">{grounding_rate}%</div>
+                            <div class="stat-label">Numeric Grounded ({grounding_passed}/{total_cases})</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with m4:
+                    st.markdown(
+                        f"""
+                        <div class="stat-tile">
                             <div class="stat-value" style="color: #a78bfa;">{check_rate}%</div>
                             <div class="stat-label">Needs-Check Flags</div>
                         </div>
                         """,
                         unsafe_allow_html=True,
                     )
-                with m4:
+                with m5:
                     st.markdown(
                         f"""
                         <div class="stat-tile">
@@ -110,7 +123,7 @@ def render_eval_page(active_slug: str):
                         """,
                         unsafe_allow_html=True,
                     )
-                with m5:
+                with m6:
                     st.markdown(
                         f"""
                         <div class="stat-tile">
@@ -149,6 +162,7 @@ def render_eval_page(active_slug: str):
                     if c_count == 0:
                         continue
                     f_ok = sum(1 for r in s_rows if r["facts_ok"])
+                    g_ok = sum(1 for r in s_rows if r["numeric_grounding_ok"] == 1 or (r["numeric_grounding_ok"] is None and r["facts_ok"]))
                     chk_ok = sum(1 for r in s_rows if r["needs_check_ok"])
                     l_ok = sum(1 for r in s_rows if r["language_ok"])
                     tot_ok = sum(1 for r in s_rows if r["facts_ok"] and r["needs_check_ok"] and r["language_ok"])
@@ -161,6 +175,7 @@ def render_eval_page(active_slug: str):
                         f"<td style='font-weight: 600; color: #f1f5f9;'>{s_name}</td>"
                         f"<td style='text-align: center; color: #cbd5e1;'>{c_count}</td>"
                         f"<td style='text-align: center; color: #60a5fa;'>{f_ok}/{c_count}</td>"
+                        f"<td style='text-align: center; color: #34d399;'>{g_ok}/{c_count}</td>"
                         f"<td style='text-align: center; color: #a78bfa;'>{chk_ok}/{c_count}</td>"
                         f"<td style='text-align: center; color: #38bdf8;'>{l_ok}/{c_count}</td>"
                         f"<td style='text-align: center; font-weight: 700; color: {'#34d399' if rate >= 80 else '#f59e0b'};'>{tot_ok}/{c_count} ({rate}%)</td>"
@@ -176,6 +191,7 @@ def render_eval_page(active_slug: str):
                                 <th style="text-align: left; padding: 10px 14px; color: #94a3b8; font-weight: 600;">Slice</th>
                                 <th style="text-align: center; padding: 10px 8px; color: #94a3b8; font-weight: 600;">Cases</th>
                                 <th style="text-align: center; padding: 10px 8px; color: #94a3b8; font-weight: 600;">Facts Grounded</th>
+                                <th style="text-align: center; padding: 10px 8px; color: #94a3b8; font-weight: 600;">Numeric Grounded</th>
                                 <th style="text-align: center; padding: 10px 8px; color: #94a3b8; font-weight: 600;">Needs-Check OK</th>
                                 <th style="text-align: center; padding: 10px 8px; color: #94a3b8; font-weight: 600;">Script OK</th>
                                 <th style="text-align: center; padding: 10px 8px; color: #94a3b8; font-weight: 600;">Overall Pass</th>
@@ -221,15 +237,19 @@ def render_eval_page(active_slug: str):
 
                     with st.expander(exp_title):
                         c_esc_reply = html.escape(r["reply"])
-                        c1, c2, c3, c4 = st.columns(4)
+                        c1, c2, c3, c4, c5 = st.columns(5)
                         with c1:
                             st.caption(f"Facts Grounding: {'✅ OK' if r['facts_ok'] else '❌ Missing / Hallucinated'}")
                         with c2:
-                            st.caption(f"Needs Check: {'✅ OK' if r['needs_check_ok'] else '❌ Mismatch'}")
+                            g_ok = r["numeric_grounding_ok"] == 1 or (r["numeric_grounding_ok"] is None and r["facts_ok"])
+                            st.caption(f"Numeric Grounding: {'✅ Grounded' if g_ok else '⚠️ Unverified'}")
                         with c3:
-                            st.caption(f"Script Match: {'✅ OK' if r['language_ok'] else '❌ Script Issue'}")
+                            st.caption(f"Needs Check: {'✅ OK' if r['needs_check_ok'] else '❌ Mismatch'}")
                         with c4:
-                            st.caption(f"Tokens: {r['prompt_tokens'] or '-'} in / {r['output_tokens'] or '-'} out")
+                            st.caption(f"Script Match: {'✅ OK' if r['language_ok'] else '❌ Script Issue'}")
+                        with c5:
+                            rm = r["retrieval_mode"] or "fts5_bm25"
+                            st.caption(f"Retrieval: `{rm}`")
 
                         st.markdown(
                             f"""
@@ -251,7 +271,7 @@ def render_eval_page(active_slug: str):
                 Execute Benchmark Evaluation
             </div>
             <div style="font-size: 0.84rem; color: #94a3b8; margin-bottom: 16px;">
-                Run the standardized 25-case evaluation suite against your local model. Results are stored in the SQLite database and exported as markdown.
+                Run the standardized 34-case evaluation suite against your local model in pure single-model isolation. Results are stored in the SQLite database and exported as markdown.
             </div>
             """,
             unsafe_allow_html=True,
@@ -260,11 +280,18 @@ def render_eval_page(active_slug: str):
         with st.form("eval_runner_form"):
             c_r1, c_r2 = st.columns(2)
             with c_r1:
-                run_model = st.text_input("Model Tag", value=active_model, help="Ollama model tag e.g. gemma2:2b")
+                model_choices = ["gemma4:e2b", "gemma2:2b", "gemma2:9b", "gemma:7b"]
+                default_idx = model_choices.index(active_model) if active_model in model_choices else 0
+                run_model = st.selectbox(
+                    "Benchmark Model",
+                    options=model_choices,
+                    index=default_idx,
+                    help="Select Gemma model tier to benchmark in single-model isolation",
+                )
             with c_r2:
                 run_split = st.selectbox("Dataset Split", options=["all", "dev", "test"], format_func=lambda s: {
-                    "all": "All Cases (25 questions)",
-                    "dev": "Dev Split (12 questions - faster)",
+                    "all": "All Cases (34 questions)",
+                    "dev": "Dev Split (21 questions - faster)",
                     "test": "Test Split (13 questions)",
                 }[s])
 

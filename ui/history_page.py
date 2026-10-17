@@ -140,18 +140,45 @@ def render_history_page(active_slug: str):
                 "pending": '<span class="rd-badge badge-warning">⏳ PENDING REVIEW</span>',
             }.get(action, '<span class="rd-badge badge-warning">PENDING</span>')
 
-            lang = (row["detected_language"] or "en").upper()
+            lang = html.escape((row["detected_language"] or "en").upper())
             lat_sec = round((row["latency_ms"] or 0) / 1000, 2)
+            model_used = html.escape(str(row["model"] or "gemma"))
+            created_at_str = html.escape(str(row["created_at"]))
+
+            row_keys = row.keys()
+            routed_model = row["routed_model"] if "routed_model" in row_keys and row["routed_model"] else None
+            retrieval_mode = row["retrieval_mode"] if "retrieval_mode" in row_keys and row["retrieval_mode"] else None
+            grounding_status = row["grounding_status"] if "grounding_status" in row_keys and row["grounding_status"] else None
+            triage_badge = row["triage_badge"] if "triage_badge" in row_keys and row["triage_badge"] else None
+
+            telemetry_badges = []
+            if triage_badge:
+                escaped_tb = html.escape(triage_badge)
+                tb_color = "badge-flagged" if "HUMAN" in triage_badge else ("badge-warning" if "POLICY" in triage_badge else "badge-clean")
+                telemetry_badges.append(f'<span class="rd-badge {tb_color}" style="font-weight: 600;">{escaped_tb}</span>')
+            if retrieval_mode:
+                escaped_rm = html.escape(retrieval_mode)
+                telemetry_badges.append(f'<span class="rd-badge badge-model" style="font-size: 0.72rem;">🔍 {escaped_rm}</span>')
+            if grounding_status:
+                escaped_gs = html.escape(grounding_status)
+                gs_color = "badge-clean" if escaped_gs == "verified" else "badge-warning"
+                telemetry_badges.append(f'<span class="rd-badge {gs_color}" style="font-size: 0.72rem;">🛡️ {escaped_gs}</span>')
+            if routed_model and routed_model != row["model"]:
+                escaped_rmodel = html.escape(routed_model)
+                telemetry_badges.append(f'<span class="rd-badge badge-warning" style="font-size: 0.72rem;">routed: {escaped_rmodel}</span>')
+
+            telemetry_html = " ".join(telemetry_badges)
 
             with st.container(border=True):
-                c_top1, c_top2 = st.columns([3, 2])
+                c_top1, c_top2 = st.columns([3.5, 1.5])
                 with c_top1:
                     st.markdown(
                         f"""
-                        <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                             {badge_html}
                             <span class="rd-badge badge-lang">{lang}</span>
-                            <span style="font-size: 0.76rem; color: #64748b;">{row['created_at']}</span>
+                            {telemetry_html}
+                            <span style="font-size: 0.74rem; color: #64748b; margin-left: 4px;">{created_at_str}</span>
                         </div>
                         """,
                         unsafe_allow_html=True,
@@ -160,7 +187,7 @@ def render_history_page(active_slug: str):
                     st.markdown(
                         f"""
                         <div style="text-align: right; font-size: 0.78rem; color: #94a3b8;">
-                            ⚡ {lat_sec}s • <code>{row['model']}</code>
+                            ⚡ {lat_sec}s • <code>{model_used}</code>
                         </div>
                         """,
                         unsafe_allow_html=True,

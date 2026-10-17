@@ -1,7 +1,7 @@
 # ReplyDesk: Local AI Customer-Reply Assistant for Small Sellers
 
 > **DEV / MLH Hacktoberfest 2026 Open-Source AI Challenge (Week 2: "Side Hustle")**  
-> Built with open-weight **Gemma 2 2B**, running locally on-device with zero cloud APIs, zero per-reply subscription bills, and complete customer privacy.
+> Built with open-weight **Gemma 4 Effective 2B** and **Gemma 2 2B**, running locally on-device with zero cloud APIs, zero per-reply subscription bills, and complete customer privacy.
 
 ---
 
@@ -98,23 +98,36 @@ flowchart TD
    - Built-in benchmark runner ([eval/run_eval.py](file:///d:/HackFest_W2/replydesk/eval/run_eval.py)) evaluates 34 standardized customer test cases across 4 languages (21 dev cases, 13 test cases).
    - Dedicated Streamlit dashboard with top KPI tiles, performance slices (All, English, Hindi, Marathi, Hinglish, dev, test), diagnostic failure inspector, and markdown report downloads.
 
-7. **SQLite FTS5 Smart Hybrid Retrieval:**
+7. **SQLite FTS5 Smart Hybrid Retrieval & RRF:**
    - Full-text search over `products(name, category, description, notes)` powered by SQLite's native FTS5 engine with BM25 relevance ranking.
-   - Automatically scales from boutique catalogues (full catalogue in prompt for 100% recall) to large inventories, retrieving the top matching items for the customer inquiry.
+   - Reciprocal Rank Fusion (RRF) combines FTS5 BM25 search with pure-Python cosine vector similarity over local embeddings, falling back gracefully when offline.
    - Real-time triggers (`AFTER INSERT`, `AFTER UPDATE`, `AFTER DELETE`) keep the search index synchronized with zero maintenance.
    - Live FTS5 keyword filter directly embedded in the Catalogue manager UI.
+
+8. **Enterprise Privacy & Security Guardrails:**
+   - **PII Scrubbing:** Automatically redacts credit cards, Aadhaar numbers, phone numbers, and emails before prompt construction.
+   - **Prompt Injection Defense:** Scans for jailbreak patterns and untrusted instruction overrides. Quarantines inputs with `<untrusted_customer_message>` boundary containment and triggers safe human escalation refusals.
+   - **Numeric Policy Verification:** Verifies both product prices and policy thresholds (e.g. minimum order amounts for free delivery) against known database values.
+   - **SSRF Protection:** Enforces localhost-only inference endpoint binding (`127.0.0.1` / `localhost`) to block SSRF and cloud data leaks.
+
+9. **Interactive Reviewer Tools:**
+   - **Reply Tone Switcher:** On-the-fly persona selection (*Warm Boutique*, *Concise WhatsApp*, *Polite Hinglish*) directly in the reply scratchpad.
+   - **Live Telemetry Bar:** Real-time visibility into routed model tier, actual model execution, prompt and completion token counts, and generation latency.
+   - **1-Click FAQ Saving:** Automatically persist frequently asked customer questions and approved answers into shop policies directly from the owner triage queue.
 
 ---
 
 ## Hardware Tested & System Telemetry
 
 ReplyDesk was built, benchmarked, and verified on a mid-range laptop:
-- **Processor:** Intel Core i5 12th Gen
+- **Processor:** Intel Core i5 12th Gen (i5-12450H)
 - **Graphics:** NVIDIA GeForce RTX 3050 Laptop GPU (6 GB VRAM)
 - **RAM:** 16 GB DDR4
-- **Model Footprint:** 1.9 GB in VRAM (100% offloaded to GPU via Ollama)
-- **Generation Speed:** ~68.7 tokens/sec
-- **Median Reply Latency:** ~3.4 seconds per draft
+- **Ollama Models Benchmarked:**
+  - `gemma4:e2b` (Flagship): 4.6 GB footprint, **100% GPU offload**, ~6.4s median latency
+  - `gemma2:2b` (Fast): 1.9 GB footprint, **100% GPU offload**, ~3.4s median latency
+  - `gemma2:9b`: 7.1 GB footprint, 54% GPU / 46% CPU offload, ~12.4s median latency
+  - `gemma:7b`: 7.8 GB footprint, 54% GPU / 46% CPU offload, ~11.8s median latency
 
 ---
 
@@ -124,10 +137,15 @@ ReplyDesk was built, benchmarked, and verified on a mid-range laptop:
 - Python 3.11 or higher
 - [Ollama](https://ollama.com/) installed and running locally
 
-### 2. Setup Ollama & Download Model
-Open a terminal and start Ollama, then pull the Gemma 2 2B model:
+### 2. Setup Ollama & Download Models
+Open a terminal and start Ollama, then pull the recommended models:
 ```bash
 ollama serve
+
+# Flagship model (94.1% pass rate, 4.6 GB Q4_K_M):
+ollama pull gemma4:e2b
+
+# Fast lightweight baseline (85.3% pass rate, 1.6 GB):
 ollama pull gemma2:2b
 ```
 
@@ -156,11 +174,11 @@ Open your browser at `http://localhost:8501`.
 
 ## Running the Automated Benchmark Suite
 
-ReplyDesk includes an automated evaluation harness with 34 test cases in [eval/questions.json](file:///d:/HackFest_W2/replydesk/eval/questions.json) (21 dev split, 13 frozen test split).
+ReplyDesk includes an automated evaluation harness with 34 test cases in [eval/questions.json](eval/questions.json) (21 dev split, 13 frozen test split).
 
 To run the complete benchmark suite from the command line:
 ```bash
-python -m eval.run_eval --split all
+python -m eval.run_eval --split all --model gemma4:e2b
 ```
 
 Or view and execute benchmarks interactively in the Streamlit UI under the **"ðŸ“Š Benchmarks & Eval"** navigation tab.
@@ -169,11 +187,38 @@ Or view and execute benchmarks interactively in the Streamlit UI under the **"ðŸ
 ```bash
 pytest -v
 ```
-All 35 unit tests pass in under 7 seconds.
+All **43 unit tests pass** in ~13 seconds with 100% offline integrity.
 
-### Measured Benchmark Results (Gemma 2 2B on RTX 3050 6GB)
+---
 
-From the standardized evaluation run on 34 cases ([eval/reports/latest_eval.md](eval/reports/latest_eval.md)):
+## Multi-Model Comparative Benchmark Matrix
+
+Comprehensive evaluation across 4 local model generations on NVIDIA RTX 3050 (6GB VRAM):
+
+| Model Tag | Architecture | Quant / Size | VRAM / Offload | Overall Pass | Facts Accuracy | Safety (needs_check) | Devanagari Preservation | Median Latency |
+|---|---|---|---|---|---|---|---|---|
+| **gemma4:e2b** | Gemma 4 Effective 2B | Q4_K_M (4.6 GB) | **100% GPU** | **94.1% (32/34)** | **97.1% (33/34)** | **100.0% (34/34)** | **100.0% (15/15)** | 6,389 ms |
+| **gemma2:2b** | Gemma 2 2B | Q4_0 (1.6 GB) | **100% GPU** | **85.3% (29/34)** | **94.1% (32/34)** | 88.2% (30/34) | 93.3% (14/15) | 3,440 ms |
+| **gemma2:9b** | Gemma 2 9B | Q4_0 (5.4 GB) | 54% GPU / 46% CPU | **72.0% (18/25)** | 92.0% (23/25) | 100.0% (25/25) | 25.0% (1/4) | 12,395 ms |
+| **gemma:7b** | Gemma 1 7B | Q4_0 (5.0 GB) | 54% GPU / 46% CPU | **52.0% (13/25)** | 76.0% (19/25) | 80.0% (20/25) | 66.7% (4/6) | 11,767 ms |
+
+### Flagship Performance: Gemma 4 Effective 2B (34 Cases)
+
+From the standardized evaluation run on 34 cases ([eval/reports/eval_gemma4_e2b_20261015_194915.md](eval/reports/eval_gemma4_e2b_20261015_194915.md)):
+
+| Slice | Cases | facts_ok | needs_check_ok | language_ok | Overall Pass | Median Latency |
+|---|---|---|---|---|---|---|
+| **All Cases** | 34 | 33/34 (97.1%) | 34/34 (100.0%) | 33/34 (97.1%) | **32/34 (94.1%)** | 6,389 ms |
+| **English** | 13 | 13/13 (100.0%) | 13/13 (100.0%) | 12/13 (92.3%) | **12/13 (92.3%)** | 6,136 ms |
+| **Hindi** | 8 | 8/8 (100.0%) | 8/8 (100.0%) | 8/8 (100.0%) | **8/8 (100.0%)** | 6,417 ms |
+| **Marathi** | 7 | 7/7 (100.0%) | 7/7 (100.0%) | 7/7 (100.0%) | **7/7 (100.0%)** | 6,929 ms |
+| **Hinglish** | 6 | 5/6 (83.3%) | 6/6 (100.0%) | 6/6 (100.0%) | **5/6 (83.3%)** | 6,187 ms |
+| **dev Split** | 21 | 20/21 (95.2%) | 21/21 (100.0%) | 21/21 (100.0%) | **20/21 (95.2%)** | 6,394 ms |
+| **test Split** | 13 | 13/13 (100.0%) | 13/13 (100.0%) | 12/13 (92.3%) | **12/13 (92.3%)** | 6,236 ms |
+
+### Fast Baseline Performance: Gemma 2 2B (34 Cases)
+
+From the standardized evaluation run on 34 cases ([eval/reports/eval_gemma2_2b_20261014_221253.md](eval/reports/eval_gemma2_2b_20261014_221253.md)):
 
 | Slice | Cases | facts_ok | needs_check_ok | language_ok | Overall Pass | Median Latency |
 |---|---|---|---|---|---|---|
@@ -212,7 +257,19 @@ Honest disclosure of model behavior and benchmark limitations observed during te
 
 ---
 
+## Roadmap & Future Upgrades
+
+See [docs/FUTURE_UPGRADES.md](docs/FUTURE_UPGRADES.md) for detailed technical specifications on post-hackathon enhancements:
+- **Confidence-Gated Auto-Dispatch:** Opt-in Auto-Pilot mode that automatically sends high-confidence FAQ replies while holding ambiguous or policy queries for owner review.
+- **Dynamic Bargaining & Negotiation Engine:** Merchant-configured floor prices and pre-approved discount boundaries.
+- **Sentiment & Emotion-Aware Triage:** Inbox sorting prioritizing angry or high-intent purchase queries.
+- **Direct Messaging Webhooks:** Official WhatsApp Cloud API and Instagram Graph API connectors.
+- **Multimodal Voice & Image Grounding:** Local Whisper transcription for customer voice notes and vision-based catalogue search.
+
+---
+
 ## License
 
 <!-- TODO: The author decides the project license -->
 [TODO: Project license to be decided by author]. Open-weight Gemma models are distributed under the [Google Gemma Terms of Use](https://ai.google.dev/gemma/terms).
+

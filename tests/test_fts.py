@@ -198,3 +198,24 @@ def test_search_products_full(fts_db):
     all_prods = search_products_full(conn, 1, "")
     assert len(all_prods) == 3
     conn.close()
+
+
+def test_sanitize_fts_query_comprehensive():
+    # Quotes, parentheses, asterisks, caret, colon, hyphen, control words
+    raw = 'kurti (blue) * "premium" ^cotton: -linen NEAR AND OR NOT 101'
+    clean = sanitize_fts_query(raw)
+    assert '"AND"*' not in clean
+    assert '"OR"*' not in clean
+    assert '"NOT"*' not in clean
+    assert '"NEAR"*' not in clean
+    assert '"kurti"*' in clean
+    assert '"blue"*' in clean
+    assert '"cotton"*' in clean
+    assert '"101"*' in clean
+
+    # Cap at 25 tokens
+    long_query = " ".join(f"word{i}" for i in range(50))
+    clean_long = sanitize_fts_query(long_query)
+    tokens = clean_long.split(" OR ")
+    assert len(tokens) <= 25
+

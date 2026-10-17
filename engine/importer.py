@@ -2,13 +2,14 @@
 
 import csv
 import json
+import re
 import sqlite3
 import sys
 from pathlib import Path
 from typing import Any
 import jsonschema
 
-from engine.db import connect, get_seller_by_slug
+from engine.db import connect, get_seller_by_slug, is_fts5_available
 
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "config" / "seller.schema.json"
 
@@ -30,6 +31,12 @@ def validate_config(data: dict[str, Any]) -> None:
         raise ConfigError(f"Config schema validation failed: {err.message}") from err
 
     shop = data.get("shop", {})
+    slug = shop.get("slug", "")
+    if not re.match(r"^[a-zA-Z0-9_-]{1,50}$", slug):
+        raise ConfigError(
+            f"Invalid shop slug '{slug}'. Must be 1 to 50 alphanumeric characters, hyphens, or underscores."
+        )
+
     default_lang = shop.get("default_language")
     languages = shop.get("languages", [])
 
@@ -96,25 +103,50 @@ def import_config(
                 raise ConfigError(
                     f"Seller with slug '{slug}' already exists. Use replace=True to overwrite."
                 )
-            # Delete existing seller; foreign keys with CASCADE remove related records
-            conn.execute("DELETE FROM sellers WHERE id = ?;", (existing["id"],))
-
-        cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO sellers (slug, shop_name, description, tone, default_language)
-            VALUES (?, ?, ?, ?, ?);
-            """,
-            (
-                slug,
-                shop["name"],
-                shop.get("description", ""),
-                shop["tone"],
-                shop["default_language"],
-            ),
-        )
-        seller_id = cur.lastrowid
-        assert seller_id is not None
+            seller_id = existing["id"]
+            conn.execute(
+                """
+                UPDATE sellers
+                SET shop_name = ?, description = ?, tone = ?, default_language = ?, updated_at = datetime('now')
+                WHERE id = ?;
+                """,
+                (
+                    shop["name"],
+                    shop.get("description", ""),
+                    shop["tone"],
+                    shop["default_language"],
+                    seller_id,
+                ),
+            )
+            # Remove existing products, languages, and config-sourced policies and samples
+            # Preserves rows marked with source_type = 'seller_faq'
+            conn.execute("DELETE FROM products WHERE seller_id = ?;", (seller_id,))
+            conn.execute("DELETE FROM seller_languages WHERE seller_id = ?;", (seller_id,))
+            conn.execute(
+                "DELETE FROM policies WHERE seller_id = ? AND (source_type != 'seller_faq' OR source_type IS NULL);",
+                (seller_id,),
+            )
+            conn.execute(
+                "DELETE FROM sample_replies WHERE seller_id = ? AND (source_type != 'seller_faq' OR source_type IS NULL);",
+                (seller_id,),
+            )
+        else:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO sellers (slug, shop_name, description, tone, default_language)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (
+                    slug,
+                    shop["name"],
+                    shop.get("description", ""),
+                    shop["tone"],
+                    shop["default_language"],
+                ),
+            )
+            seller_id = cur.lastrowid
+            assert seller_id is not None
 
         for lang in shop["languages"]:
             conn.execute(
@@ -122,6 +154,7 @@ def import_config(
                 (seller_id, lang),
             )
 
+        cur = conn.cursor()
         for prod in data["products"]:
             attrs = json.dumps(prod.get("attributes") or {})
             cur.execute(
@@ -157,8 +190,11 @@ def import_config(
         for pol in data["policies"]:
             conn.execute(
                 """
-                INSERT INTO policies (seller_id, topic, title, body)
-                VALUES (?, ?, ?, ?);
+                INSERT INTO policies (seller_id, topic, title, body, source_type)
+                VALUES (?, ?, ?, ?, 'config')
+                ON CONFLICT(seller_id, topic, title) DO UPDATE SET
+                    body = excluded.body,
+                    source_type = 'config';
                 """,
                 (seller_id, pol["topic"], pol["title"], pol["body"]),
             )
@@ -166,11 +202,17 @@ def import_config(
         for samp in data["sample_replies"]:
             conn.execute(
                 """
-                INSERT INTO sample_replies (seller_id, language, customer_message, reply)
-                VALUES (?, ?, ?, ?);
+                INSERT INTO sample_replies (seller_id, language, customer_message, reply, source_type)
+                VALUES (?, ?, ?, ?, 'config');
                 """,
                 (seller_id, samp["language"], samp["customer_message"], samp["reply"]),
             )
+
+        if is_fts5_available(conn):
+            try:
+                conn.execute("INSERT INTO products_fts(products_fts) VALUES('rebuild');")
+            except Exception:
+                pass
 
         return seller_id
 
@@ -248,7 +290,7 @@ def export_config(conn: sqlite3.Connection, slug: str) -> dict[str, Any]:
 
     # Policies
     cur.execute(
-        "SELECT topic, title, body FROM policies WHERE seller_id = ? ORDER BY id ASC;",
+        "SELECT topic, title, body FROM policies WHERE seller_id = ? AND (source_type = 'config' OR source_type IS NULL) ORDER BY id ASC;",
         (seller_id,),
     )
     policies = [
@@ -260,7 +302,7 @@ def export_config(conn: sqlite3.Connection, slug: str) -> dict[str, Any]:
     cur.execute(
         """
         SELECT language, customer_message, reply
-        FROM sample_replies WHERE seller_id = ? ORDER BY id ASC;
+        FROM sample_replies WHERE seller_id = ? AND (source_type = 'config' OR source_type IS NULL) ORDER BY id ASC;
         """,
         (seller_id,),
     )

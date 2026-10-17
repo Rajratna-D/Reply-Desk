@@ -46,12 +46,13 @@ CREATE TABLE product_variants (
 );
 
 CREATE TABLE policies (
-    id        INTEGER PRIMARY KEY,
-    seller_id INTEGER NOT NULL REFERENCES sellers (id) ON DELETE CASCADE,
-    topic     TEXT    NOT NULL
-                      CHECK (topic IN ('delivery', 'returns', 'payment', 'hours', 'ordering', 'other')),
-    title     TEXT    NOT NULL,
-    body      TEXT    NOT NULL,
+    id          INTEGER PRIMARY KEY,
+    seller_id   INTEGER NOT NULL REFERENCES sellers (id) ON DELETE CASCADE,
+    topic       TEXT    NOT NULL
+                        CHECK (topic IN ('delivery', 'returns', 'payment', 'hours', 'ordering', 'other')),
+    title       TEXT    NOT NULL,
+    body        TEXT    NOT NULL,
+    source_type TEXT    NOT NULL DEFAULT 'config',
     UNIQUE (seller_id, topic, title)
 );
 
@@ -60,7 +61,8 @@ CREATE TABLE sample_replies (
     seller_id        INTEGER NOT NULL REFERENCES sellers (id) ON DELETE CASCADE,
     language         TEXT    NOT NULL CHECK (language IN ('en', 'hi', 'mr', 'hinglish')),
     customer_message TEXT    NOT NULL,
-    reply            TEXT    NOT NULL
+    reply            TEXT    NOT NULL,
+    source_type      TEXT    NOT NULL DEFAULT 'config'
 );
 
 CREATE TABLE reply_log (
@@ -79,7 +81,20 @@ CREATE TABLE reply_log (
     seller_action      TEXT    CHECK (seller_action IS NULL
                                       OR seller_action IN ('sent_as_is', 'edited', 'discarded')),
     final_reply        TEXT,
+    routed_model       TEXT,
+    retrieval_mode     TEXT,
+    grounding_status   TEXT,
+    triage_badge       TEXT,
     created_at         TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS embeddings_cache (
+    seller_id   INTEGER NOT NULL,
+    item_key    TEXT    NOT NULL,
+    text_hash   TEXT    NOT NULL,
+    vector_json TEXT    NOT NULL,
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (seller_id, item_key, text_hash)
 );
 
 CREATE TABLE eval_runs (
@@ -108,6 +123,8 @@ CREATE TABLE eval_results (
     prompt_tokens    INTEGER,
     output_tokens    INTEGER,
     tone_score       INTEGER CHECK (tone_score IS NULL OR tone_score BETWEEN 1 AND 5),
+    numeric_grounding_ok INTEGER CHECK (numeric_grounding_ok IS NULL OR numeric_grounding_ok IN (0, 1)),
+    retrieval_mode   TEXT,
     UNIQUE (run_id, case_id)
 );
 

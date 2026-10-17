@@ -1,10 +1,12 @@
-"""Settings page for local model configuration and maintenance."""
-
+import html
 import os
+from pathlib import Path
 import streamlit as st
-from engine.config import load_settings
+from engine.config import load_settings, validate_ollama_url
 from engine.db import clear_history, connect, get_seller_by_slug
 from engine.llm import ollama_status
+
+__all__ = ["render_settings_page", "validate_ollama_url"]
 
 
 def render_settings_page(active_slug: str):
@@ -54,12 +56,26 @@ def render_settings_page(active_slug: str):
                     unsafe_allow_html=True,
                 )
 
+            raw_host = settings.ollama_host if settings else "http://localhost:11434"
+            try:
+                validated_host = validate_ollama_url(raw_host)
+                ssrf_status = '<span style="color: #34d399; font-weight: 600;">SSRF Protected (Localhost)</span>'
+            except Exception as e:
+                validated_host = raw_host
+                ssrf_status = f'<span style="color: #f87171; font-weight: 600;">Blocked: {html.escape(str(e))}</span>'
+
+            escaped_host = html.escape(validated_host)
+
             st.markdown(
                 f"""
                 <table style="width: 100%; font-size: 0.85rem; color: #cbd5e1; border-collapse: collapse; margin-top: 10px;">
                     <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
                         <td style="padding: 8px 0; color: #94a3b8;">Inference Endpoint</td>
-                        <td style="padding: 8px 0; font-family: monospace; text-align: right;">{settings.ollama_host if settings else 'http://localhost:11434'}</td>
+                        <td style="padding: 8px 0; font-family: monospace; text-align: right;">{escaped_host}</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
+                        <td style="padding: 8px 0; color: #94a3b8;">Security & SSRF Check</td>
+                        <td style="padding: 8px 0; text-align: right;">{ssrf_status}</td>
                     </tr>
                     <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
                         <td style="padding: 8px 0; color: #94a3b8;">Context Window (NUM_CTX)</td>
@@ -119,6 +135,40 @@ def render_settings_page(active_slug: str):
                 unsafe_allow_html=True,
             )
 
+            first_class_models = ["gemma4:e2b", "gemma2:2b", "gemma2:9b", "gemma:7b"]
+            all_selectable = list(first_class_models)
+            for m in available_models:
+                if m not in all_selectable:
+                    all_selectable.append(m)
+
+            selected_idx = all_selectable.index(current_model) if current_model in all_selectable else 0
+            new_model = st.selectbox(
+                "Switch Default Model Tier:",
+                options=all_selectable,
+                index=selected_idx,
+                help="Select default Gemma model tier used for drafting and routing",
+            )
+            if new_model != current_model:
+                if st.button("Apply Model Change", type="primary", use_container_width=True):
+                    os.environ["REPLYDESK_MODEL"] = new_model
+                    env_file = Path(__file__).resolve().parent.parent / ".env"
+                    if env_file.exists():
+                        env_lines = env_file.read_text(encoding="utf-8").splitlines()
+                        updated_lines = []
+                        found_key = False
+                        for el in env_lines:
+                            if el.startswith("REPLYDESK_MODEL="):
+                                updated_lines.append(f"REPLYDESK_MODEL={new_model}")
+                                found_key = True
+                            else:
+                                updated_lines.append(el)
+                        if not found_key:
+                            updated_lines.append(f"REPLYDESK_MODEL={new_model}")
+                        env_file.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
+                    st.success(f"Default model updated to {new_model}!")
+                    st.rerun()
+
+            st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
             st.markdown(
                 """
                 <div style="font-size: 0.78rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; margin-bottom: 6px;">
@@ -141,7 +191,7 @@ def render_settings_page(active_slug: str):
                         unsafe_allow_html=True,
                     )
             else:
-                st.warning("No models found. Pull one via terminal: `ollama pull gemma2:2b`")
+                st.warning("No models found. Pull one via terminal: `ollama pull gemma4:e2b`")
 
         with st.container(border=True):
             st.markdown(

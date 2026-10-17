@@ -13,22 +13,28 @@ if sys.stdout.encoding.lower() != "utf-8":
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import argparse
 from engine.service import draft_reply
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Verify draft_reply across sample shops.")
+    parser.add_argument("--model", type=str, default=None, help="Model name to evaluate (e.g. gemma4:e2b)")
+    args = parser.parse_args()
+
     test_cases = [
         ("urban_thread", "Hi, how much is the cotton kurti?"),
         ("sweet_crumbs", "How much is a 1 kg chocolate truffle cake?"),
         ("kalakruti_jewels", "What is the price of the jhumka?"),
     ]
 
-    print("Verifying draft_reply on all three sample shops:\n" + "=" * 50)
+    target_desc = args.model or "default config model"
+    print(f"Verifying draft_reply on all three sample shops (Model: {target_desc}):\n" + "=" * 50)
     for slug, message in test_cases:
         print(f"\n[Shop: {slug}]")
         print(f"Customer Message: {message}")
         try:
-            draft = draft_reply(slug, message)
+            draft = draft_reply(slug, message, model=args.model)
             print(f"Drafted Reply:   {draft.reply}")
             print(f"Detected Lang:   {draft.language}")
             print(f"Needs Check:     {draft.needs_check}")

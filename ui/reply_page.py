@@ -1,7 +1,8 @@
 """Manual reply drafting workbench."""
 
+import html
 import streamlit as st
-from engine.db import connect, get_seller_by_slug, list_policies, list_products_full, set_reply_action
+from engine.db import connect, get_seller_by_slug, list_policies, list_products_full, save_faq_pair, set_reply_action
 from engine.service import draft_reply
 
 
@@ -37,9 +38,19 @@ def render_reply_page(active_slug: str):
             customer_msg = st.text_area(
                 "Customer message input",
                 placeholder="Paste customer WhatsApp / Instagram chat inquiry here...",
-                height=140,
+                height=120,
                 label_visibility="collapsed",
                 key="scratchpad_input_text",
+            )
+
+            # Reply Tone Selector
+            tone_options = ["Warm Boutique", "Concise WhatsApp", "Polite Hinglish"]
+            selected_tone = st.selectbox(
+                "Reply Tone Style",
+                tone_options,
+                index=0,
+                key="reply_tone_select",
+                help="Switch tone style dynamically across boutique warmth, concise messaging, or polite Hinglish.",
             )
 
             btn_col, _ = st.columns([1.6, 2])
@@ -52,13 +63,19 @@ def render_reply_page(active_slug: str):
                 else:
                     with st.spinner("Analyzing catalogue & drafting reply with Gemma 2..."):
                         try:
-                            draft = draft_reply(active_slug, customer_msg.strip(), log=True)
+                            draft = draft_reply(
+                                active_slug,
+                                customer_msg.strip(),
+                                log=True,
+                                tone_override=selected_tone,
+                            )
                             st.session_state["manual_draft"] = draft
                         except Exception as err:
                             st.error(f"Generation error: {err}")
 
         # Grounded Knowledge Context Accordion
-        with st.expander(f"📚 {seller['shop_name']} Grounded Context ({len(products)} products, {len(policies)} policies)"):
+        escaped_shop_name = html.escape(seller["shop_name"])
+        with st.expander(f"📚 {escaped_shop_name} Grounded Context ({len(products)} products, {len(policies)} policies)"):
             st.caption(f"**Tone:** {seller['tone']}")
             st.markdown("**Catalog Items:**")
             for p in products:
@@ -95,34 +112,70 @@ def render_reply_page(active_slug: str):
                     unsafe_allow_html=True,
                 )
             else:
-                # Metadata Row
+                # Top Metadata Row
                 c_m1, c_m2 = st.columns([3, 2])
                 with c_m1:
                     if draft.needs_check:
                         st.markdown('<span class="rd-badge badge-flagged">⚠️ NEEDS CHECK</span>', unsafe_allow_html=True)
                     else:
                         st.markdown('<span class="rd-badge badge-clean">✓ GROUNDED</span>', unsafe_allow_html=True)
-                    st.markdown(f'<span class="rd-badge badge-lang">{draft.language.upper()}</span>', unsafe_allow_html=True)
+                    st.markdown(f'<span class="rd-badge badge-lang">{html.escape(draft.language.upper())}</span>', unsafe_allow_html=True)
                 with c_m2:
                     lat_sec = round(draft.latency_ms / 1000, 2)
                     st.markdown(
-                        f'<div style="text-align: right; font-size: 0.78rem; color: #94a3b8;">⚡ {lat_sec}s • {draft.model}</div>',
+                        f'<div style="text-align: right; font-size: 0.78rem; color: #94a3b8;">⚡ {lat_sec}s • {html.escape(draft.model)}</div>',
                         unsafe_allow_html=True,
                     )
 
+                # Transparent Telemetry Bar
+                route_desc = draft.route_reason or "Fast Route"
+                route_label = f"{draft.model} - {route_desc}"
+                if draft.fallback_used:
+                    route_label += f" (fallback from {draft.routed_model})"
+
+                retrieval_label = "Hybrid RRF" if draft.retrieval_mode == "hybrid_rrf" else "SQLite FTS5"
+
+                if draft.unverified_numbers:
+                    grounding_label = f"Unverified Numbers Flagged ({', '.join(draft.unverified_numbers)})"
+                    grounding_color = "#f87171"
+                else:
+                    grounding_label = "Verified"
+                    grounding_color = "#34d399"
+
+                st.markdown(
+                    f"""
+                    <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 8px 12px; margin: 10px 0; font-size: 0.78rem;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                            <span style="color: #94a3b8;">Model & Route:</span>
+                            <span style="color: #cbd5e1; font-family: monospace; font-weight: 600;">{html.escape(route_label)}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                            <span style="color: #94a3b8;">Retrieval Mode:</span>
+                            <span style="color: #818cf8; font-weight: 600;">{html.escape(retrieval_label)}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: #94a3b8;">Numeric Grounding:</span>
+                            <span style="color: {grounding_color}; font-weight: 600;">{html.escape(grounding_label)}</span>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
                 # Warning callouts
                 if draft.needs_check:
+                    escaped_reason = html.escape(draft.reason)
                     st.markdown(
                         f"""
-                        <div class="alert-card-danger" style="margin-top: 10px;">
-                            <strong>⚠️ Notice:</strong> {draft.reason}
+                        <div class="alert-card-danger" style="margin-top: 6px;">
+                            <strong>⚠️ Notice:</strong> {escaped_reason}
                         </div>
                         """,
                         unsafe_allow_html=True,
                     )
 
                 if draft.ungrounded_amounts:
-                    un_str = ", ".join(f"₹{a}" for a in draft.ungrounded_amounts)
+                    un_str = html.escape(", ".join(f"₹{a}" for a in draft.ungrounded_amounts))
                     st.markdown(
                         f"""
                         <div class="alert-card-warning">
@@ -133,7 +186,7 @@ def render_reply_page(active_slug: str):
                     )
 
                 if draft.risk_topics:
-                    topics_str = ", ".join(t.replace("_", " ").title() for t in draft.risk_topics)
+                    topics_str = html.escape(", ".join(t.replace("_", " ").title() for t in draft.risk_topics))
                     st.markdown(
                         f"""
                         <div class="alert-card-warning">
@@ -156,6 +209,14 @@ def render_reply_page(active_slug: str):
                 # Quick Copy Box
                 st.code(edited_draft, language="markdown")
 
+                # 1-Click Save to Shop FAQ Checkbox
+                save_to_faq = st.checkbox(
+                    "💾 Save this Q&A to Shop FAQ upon approval",
+                    value=False,
+                    key=f"cb_save_faq_{draft.reply_id}",
+                    help="Automatically adds this customer question and approved reply to shop policies so future queries match instantly.",
+                )
+
                 # Resolve Actions
                 st.caption("Record action for history audit:")
                 col_a1, col_a2, col_a3 = st.columns(3)
@@ -164,8 +225,12 @@ def render_reply_page(active_slug: str):
                 try:
                     with col_a1:
                         if st.button("✓ Sent As Is", key=f"manual_btn_as_is_{draft.reply_id}", type="primary", use_container_width=True):
+                            clean_text = draft.reply.strip()
                             if draft.reply_id:
-                                set_reply_action(conn, draft.reply_id, "sent_as_is", final_reply=draft.reply)
+                                set_reply_action(conn, draft.reply_id, "sent_as_is", final_reply=clean_text)
+                            if save_to_faq and customer_msg.strip():
+                                save_faq_pair(conn, seller["id"], customer_msg.strip(), clean_text, language=draft.language)
+                                st.success("Saved Q&A pair to Shop FAQ!")
                             st.success("Logged as sent!")
 
                     with col_a2:
@@ -176,6 +241,9 @@ def render_reply_page(active_slug: str):
                             else:
                                 if draft.reply_id:
                                     set_reply_action(conn, draft.reply_id, "edited", final_reply=clean_edited)
+                                if save_to_faq and customer_msg.strip():
+                                    save_faq_pair(conn, seller["id"], customer_msg.strip(), clean_edited, language=draft.language)
+                                    st.success("Saved Q&A pair to Shop FAQ!")
                                 st.success("Logged edited draft!")
 
                     with col_a3:

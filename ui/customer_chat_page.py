@@ -11,13 +11,18 @@ def send_customer_message(active_slug: str, message_text: str):
     clean_msg = message_text.strip()
     if not clean_msg:
         return
+    prior_queries = st.session_state.get("customer_prior_queries", [])
     with st.spinner("Delivering message to shop inbox..."):
         try:
             draft = draft_reply(
                 seller_slug=active_slug,
                 message=clean_msg,
                 seller_action=None,  # Pending owner review
+                prior_queries=prior_queries,
             )
+            if "customer_prior_queries" not in st.session_state:
+                st.session_state["customer_prior_queries"] = []
+            st.session_state["customer_prior_queries"].append(clean_msg)
             if draft.reply_id:
                 if "customer_reply_ids" not in st.session_state:
                     st.session_state["customer_reply_ids"] = []
@@ -28,8 +33,15 @@ def send_customer_message(active_slug: str, message_text: str):
 
 
 def render_customer_chat_page(active_slug: str):
+    if st.session_state.get("customer_chat_active_slug") != active_slug:
+        st.session_state["customer_chat_active_slug"] = active_slug
+        st.session_state["customer_reply_ids"] = []
+        st.session_state["customer_prior_queries"] = []
+
     if "customer_reply_ids" not in st.session_state:
         st.session_state["customer_reply_ids"] = []
+    if "customer_prior_queries" not in st.session_state:
+        st.session_state["customer_prior_queries"] = []
 
     session_ids = st.session_state["customer_reply_ids"]
 
@@ -59,6 +71,8 @@ def render_customer_chat_page(active_slug: str):
 
     shop_name = seller["shop_name"]
     shop_desc = seller["description"] or "Local seller"
+    escaped_shop_name = html.escape(shop_name)
+    escaped_shop_desc = html.escape(shop_desc)
 
     # Split-screen demo hint banner
     st.markdown(
@@ -83,11 +97,11 @@ def render_customer_chat_page(active_slug: str):
                 <div class="chat-device-header" style="border-radius: 12px 12px 0 0; padding: 10px 14px;">
                     <div style="display: flex; align-items: center; gap: 12px;">
                         <div style="width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, #059669 0%, #10b981 100%); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.05rem; color: #ffffff; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);">
-                            {shop_name[0]}
+                            {escaped_shop_name[0] if escaped_shop_name else 'S'}
                         </div>
                         <div>
                             <div style="font-weight: 600; font-size: 0.95rem; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
-                                {shop_name} <span style="color: #38bdf8; font-size: 0.85rem;" title="Verified Business">✓</span>
+                                {escaped_shop_name} <span style="color: #38bdf8; font-size: 0.85rem;" title="Verified Business">✓</span>
                             </div>
                             <div style="font-size: 0.74rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
                                 <span class="pulse-dot"></span> Active now on WhatsApp
@@ -111,7 +125,7 @@ def render_customer_chat_page(active_slug: str):
                     f"""
                     <div style="text-align: center; padding: 45px 20px; color: #64748b;">
                         <div style="font-size: 2.2rem; margin-bottom: 8px;">🛍️</div>
-                        <div style="font-size: 1.05rem; font-weight: 600; color: #e2e8f0; margin-bottom: 4px;">Direct WhatsApp Inquiry with {shop_name}</div>
+                        <div style="font-size: 1.05rem; font-weight: 600; color: #e2e8f0; margin-bottom: 4px;">Direct WhatsApp Inquiry with {escaped_shop_name}</div>
                         <div style="font-size: 0.82rem; max-width: 360px; margin: 0 auto; line-height: 1.4;">
                             Ask about pricing, stock availability, sizes, delivery time, or custom orders in English, Hindi, Marathi, or Hinglish.
                         </div>
@@ -147,7 +161,7 @@ def render_customer_chat_page(active_slug: str):
                         st.markdown(
                             f"""
                             <div class="chat-bubble-shop">
-                                <div style="font-size: 0.72rem; color: #34d399; font-weight: 600; margin-bottom: 3px;">{shop_name}</div>
+                                <div style="font-size: 0.72rem; color: #34d399; font-weight: 600; margin-bottom: 3px;">{escaped_shop_name}</div>
                                 <div>{escaped_reply}</div>
                                 <div style="font-size: 0.68rem; opacity: 0.55; text-align: right; margin-top: 3px;">Delivered</div>
                             </div>
@@ -196,10 +210,10 @@ def render_customer_chat_page(active_slug: str):
             st.markdown(
                 f"""
                 <div style="font-weight: 700; font-size: 0.95rem; color: #f8fafc; margin-bottom: 4px;">
-                    🏪 {shop_name}
+                    🏪 {escaped_shop_name}
                 </div>
                 <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 12px; line-height: 1.4;">
-                    {shop_desc}
+                    {escaped_shop_desc}
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -228,6 +242,7 @@ def render_customer_chat_page(active_slug: str):
 
             if st.button("🗑️ Reset Chat View", use_container_width=True, help="Clears message history for this browser session"):
                 st.session_state["customer_reply_ids"] = []
+                st.session_state["customer_prior_queries"] = []
                 st.rerun()
 
             st.divider()

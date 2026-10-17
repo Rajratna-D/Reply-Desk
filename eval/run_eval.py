@@ -123,7 +123,10 @@ def score_reply(case: dict[str, Any], draft: Draft) -> dict[str, Any]:
     # 4. language_label_ok (whether the model labeled language correctly)
     language_label_ok = (draft.language.lower() == exp_lang)
 
-    # 5. overall pass
+    # 5. numeric_grounding_ok (no unverified numbers or ungrounded currency amounts)
+    numeric_grounding_ok = (len(draft.unverified_numbers) == 0 and len(draft.ungrounded_amounts) == 0)
+
+    # 6. overall pass
     passed = bool(facts_ok and needs_check_ok and language_ok)
 
     return {
@@ -133,6 +136,8 @@ def score_reply(case: dict[str, Any], draft: Draft) -> dict[str, Any]:
         "needs_check_ok": needs_check_ok,
         "language_ok": language_ok,
         "language_label_ok": language_label_ok,
+        "numeric_grounding_ok": numeric_grounding_ok,
+        "retrieval_mode": draft.retrieval_mode,
         "passed": passed,
     }
 
@@ -191,7 +196,7 @@ def run_evaluation(
             if progress_callback:
                 progress_callback(idx, total, case)
 
-            # Generate draft
+            # Generate draft with force_model=True for pure single-model benchmarking
             try:
                 draft = draft_reply(
                     seller_slug=shop_slug,
@@ -199,6 +204,7 @@ def run_evaluation(
                     model=active_model,
                     log=False,
                     conn=conn,
+                    force_model=True,
                 )
             except Exception as ex:
                 # Handle generation failure gracefully
@@ -233,6 +239,8 @@ def run_evaluation(
                 latency_ms=draft.latency_ms,
                 prompt_tokens=draft.prompt_tokens,
                 output_tokens=draft.output_tokens,
+                numeric_grounding_ok=scores["numeric_grounding_ok"],
+                retrieval_mode=draft.retrieval_mode,
             )
 
             results.append({
@@ -254,6 +262,16 @@ def run_evaluation(
             "test": [r for r in results if r["case"].get("split") == "test"],
         }
 
+        retrieval_counts: dict[str, int] = {}
+        for r in results:
+            mode = r["draft"].retrieval_mode or "unknown"
+            retrieval_counts[mode] = retrieval_counts.get(mode, 0) + 1
+
+        grounding_counts = {
+            "verified": sum(1 for r in results if r["scores"]["numeric_grounding_ok"]),
+            "unverified": sum(1 for r in results if not r["scores"]["numeric_grounding_ok"]),
+        }
+
         slice_stats = {}
         for slice_name, slice_rows in slices.items():
             count = len(slice_rows)
@@ -262,6 +280,7 @@ def run_evaluation(
             facts_passed = sum(1 for r in slice_rows if r["scores"]["facts_ok"])
             check_passed = sum(1 for r in slice_rows if r["scores"]["needs_check_ok"])
             lang_passed = sum(1 for r in slice_rows if r["scores"]["language_ok"])
+            grounding_passed = sum(1 for r in slice_rows if r["scores"]["numeric_grounding_ok"])
             total_passed = sum(1 for r in slice_rows if r["scores"]["passed"])
             latencies = [r["draft"].latency_ms for r in slice_rows if r["draft"].latency_ms > 0]
             med_latency = statistics.median(latencies) if latencies else 0
@@ -271,6 +290,7 @@ def run_evaluation(
                 "facts_ok": f"{facts_passed}/{count} ({round(facts_passed/count*100, 1)}%)",
                 "needs_check_ok": f"{check_passed}/{count} ({round(check_passed/count*100, 1)}%)",
                 "language_ok": f"{lang_passed}/{count} ({round(lang_passed/count*100, 1)}%)",
+                "numeric_grounding_ok": f"{grounding_passed}/{count} ({round(grounding_passed/count*100, 1)}%)",
                 "passed": f"{total_passed}/{count} ({round(total_passed/count*100, 1)}%)",
                 "median_latency_ms": int(med_latency),
                 "pass_rate": round(total_passed / count * 100, 1),
@@ -283,6 +303,8 @@ def run_evaluation(
             "notes": notes or "",
             "total_cases": total,
             "overall_pass_rate": slice_stats.get("All", {}).get("pass_rate", 0.0),
+            "retrieval_modes": retrieval_counts,
+            "grounding_summary": grounding_counts,
             "slice_stats": slice_stats,
             "results": results,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -304,6 +326,10 @@ def generate_markdown_report(summary: dict[str, Any]) -> str:
     report_file = REPORTS_DIR / f"eval_{model_tag}_{timestamp}.md"
     latest_file = REPORTS_DIR / "latest_eval.md"
 
+    retrieval_summary_str = ", ".join(f"{k}: {v}" for k, v in summary.get("retrieval_modes", {}).items()) or "None"
+    grounding_summary = summary.get("grounding_summary", {})
+    verified_grounding = grounding_summary.get("verified", 0)
+
     lines = [
         f"# ReplyDesk Evaluation Report - {summary['model']}",
         "",
@@ -313,17 +339,19 @@ def generate_markdown_report(summary: dict[str, Any]) -> str:
         f"- **Notes:** {summary['notes'] or 'Standard automated benchmark run'}",
         f"- **Total Cases:** {summary['total_cases']}",
         f"- **Overall Pass Rate:** {summary['overall_pass_rate']}%",
+        f"- **Retrieval Modes:** `{retrieval_summary_str}`",
+        f"- **Numeric Grounding Verified:** {verified_grounding}/{summary['total_cases']}",
         "",
         "## Summary Results by Slice",
         "",
-        "| Slice | Cases | facts_ok | needs_check_ok | language_ok | Overall Pass | Median Latency |",
-        "|---|---|---|---|---|---|---|",
+        "| Slice | Cases | facts_ok | needs_check_ok | language_ok | numeric_grounding | Overall Pass | Median Latency |",
+        "|---|---|---|---|---|---|---|---|",
     ]
 
     for slice_name, stats in summary["slice_stats"].items():
         lines.append(
             f"| {slice_name} | {stats['count']} | {stats['facts_ok']} | "
-            f"{stats['needs_check_ok']} | {stats['language_ok']} | "
+            f"{stats['needs_check_ok']} | {stats['language_ok']} | {stats.get('numeric_grounding_ok', 'N/A')} | "
             f"**{stats['passed']}** | {stats['median_latency_ms']} ms |"
         )
 
@@ -331,8 +359,8 @@ def generate_markdown_report(summary: dict[str, Any]) -> str:
         "",
         "## Detailed Case Breakdown",
         "",
-        "| ID | Shop | Lang | Cat | Split | Pass | Latency | Customer Inquiry | Reply Draft | Diagnostic |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "| ID | Shop | Lang | Cat | Split | Pass | Mode | Grounding | Latency | Customer Inquiry | Reply Draft | Diagnostic |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ])
 
     for item in summary["results"]:
@@ -342,6 +370,8 @@ def generate_markdown_report(summary: dict[str, Any]) -> str:
         pass_badge = "PASS" if s["passed"] else "FAIL"
         clean_inquiry = c["message"].replace("|", "\\|")
         clean_reply = d.reply.replace("|", "\\|").replace("\n", " ")
+        ground_badge = "VERIFIED" if s.get("numeric_grounding_ok", True) else "UNVERIFIED"
+        mode_str = d.retrieval_mode or "unknown"
         diag = []
         if not s["facts_ok"]:
             if s["missing_groups"]:
@@ -356,7 +386,7 @@ def generate_markdown_report(summary: dict[str, Any]) -> str:
         diag_str = ", ".join(diag) if diag else "Clean"
         lines.append(
             f"| `{c['id']}` | {c['shop']} | {c['language']} | {c.get('category')} | {c.get('split')} | "
-            f"**{pass_badge}** | {d.latency_ms} ms | {clean_inquiry} | {clean_reply} | {diag_str} |"
+            f"**{pass_badge}** | `{mode_str}` | {ground_badge} | {d.latency_ms} ms | {clean_inquiry} | {clean_reply} | {diag_str} |"
         )
 
     lines.extend([
