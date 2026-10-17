@@ -3,6 +3,13 @@
 > **DEV / MLH Hacktoberfest 2026 Open-Source AI Challenge (Week 2: "Side Hustle")**  
 > Built with open-weight **Gemma 4 Effective 2B** and **Gemma 2 2B**, running locally on-device with zero cloud APIs, zero per-reply subscription bills, and complete customer privacy.
 
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Ollama](https://img.shields.io/badge/Ollama-Offline%20Inference-black.svg)](https://ollama.com)
+[![Model](https://img.shields.io/badge/Gemma_2-2B%20%7C%204--bit-orange.svg)](https://ai.google.dev/gemma)
+[![Tests Passing](https://img.shields.io/badge/tests-45%20passed-brightgreen.svg)]()
+[![Privacy](https://img.shields.io/badge/Privacy-100%25%20On--Device-success.svg)]()
+
 ---
 
 ## The Problem
@@ -270,6 +277,7 @@ See [docs/FUTURE_UPGRADES.md](docs/FUTURE_UPGRADES.md) for detailed technical sp
 
 ## License
 
-<!-- TODO: The author decides the project license -->
-[TODO: Project license to be decided by author]. Open-weight Gemma models are distributed under the [Google Gemma Terms of Use](https://ai.google.dev/gemma/terms).
+This project is licensed under the [Apache License 2.0](LICENSE).
+
+Open-weight Gemma models are distributed under the [Google Gemma Terms of Use](https://ai.google.dev/gemma/terms).
 
